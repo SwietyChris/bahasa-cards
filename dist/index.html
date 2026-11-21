@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f5fb">
+  <meta name="description" content="Study Indonesian and English flashcards in your own numbered decks.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Wei-Chien’s Bahasa Studio</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="icon" type="image/png" href="./icon-192.png">
+  <link rel="stylesheet" href="./style.css">
+  <script defer src="./vendor/jszip.min.js"></script>
+  <script defer src="./vendor/pdf-lib.min.js"></script>
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <div class="wordmark">
+        <span class="mark" aria-hidden="true"></span>
+        <span class="brand-name"><span class="brand-owner">Wei-Chien’s</span>Bahasa <strong>Studio</strong></span>
+      </div>
+      <nav aria-label="Main">
+        <button type="button" id="study-tab" class="nav-button" aria-current="page">Study</button>
+        <button type="button" id="library-tab" class="nav-button">Library</button>
+        <button type="button" id="quiz-tab" class="nav-button">Quiz</button>
+      </nav>
+      <button type="button" id="capture-open" class="button primary compact">Add cards</button>
+    </div>
+  </header>
+  <main class="layout">
+    <aside class="decks" aria-labelledby="decks-title">
+      <div class="decks-top">
+        <h2 id="decks-title">Decks</h2>
+        <span id="total-cards"></span>
+      </div>
+      <div id="deck-list" class="deck-list"></div>
+      <div class="deck-field">
+        <label for="deck-picker">Deck</label>
+        <select id="deck-picker"></select>
+      </div>
+    </aside>
+    <div class="content">
+      <div class="sample-note" id="sample-note">
+        <span><strong>Sample cards</strong> · Add or import cards to start your collection.</span>
+        <button type="button" id="import-first" class="text-button">Import deck</button>
+      </div>
+      <p id="message" class="page-message" role="status" hidden></p>
+      <p id="storage-message" class="page-message" role="status" hidden>Storage is unavailable on this device. Keep a copy of your cards so you can import them again.</p>
+      <section id="study-view" aria-labelledby="study-title">
+        <div class="section-head">
+          <div>
+            <h1 id="study-title">Study</h1>
+            <p id="study-context"></p>
+          </div>
+          <div class="options">
+            <div class="field">
+              <label for="direction">Show first</label>
+              <select id="direction">
+                <option value="id">Indonesian</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="study-mode">Practice</label>
+              <select id="study-mode">
+                <option value="due">Due now</option>
+                <option value="all">All cards</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div id="study-round">
+          <div class="round-meta">
+            <p id="round-status"></p>
+            <button type="button" id="shuffle" class="text-button" hidden>Shuffle cards</button>
+          </div>
+          <progress id="round-progress" value="0" max="1" aria-label="Cards completed this round"></progress>
+          <button type="button" id="flashcard" class="flashcard">
+            <span id="card-side" class="card-side"></span>
+            <span id="card-text" class="card-text" aria-live="polite"></span>
+            <span id="card-hint" class="card-hint">Tap to reveal</span>
+          </button>
+          <div class="grading">
+            <button type="button" id="again" class="button outline" disabled>Again</button>
+            <button type="button" id="remember" class="button primary" disabled>Got it</button>
+          </div>
+          <div class="grade-notes">
+            <span id="again-note">Returns this round</span>
+            <span id="remember-note"></span>
+          </div>
+          <div class="skip-row"><button type="button" id="skip" class="text-button">Skip for now</button></div>
+        </div>
+        <div id="round-done" class="empty-state" hidden>
+          <h2 id="done-title" tabindex="-1"></h2>
+          <p id="done-text"></p>
+          <button type="button" id="next-round" class="button primary"></button>
+        </div>
+      </section>
+      <section id="library-view" aria-labelledby="library-title" hidden>
+        <div class="section-head">
+          <div>
+            <h1 id="library-title">Library</h1>
+            <p id="library-count" role="status"></p>
+          </div>
+          <div class="library-actions">
+            <button type="button" id="import-open" class="button outline compact">Import</button>
+            <button type="button" id="export-cards" class="button outline compact" hidden>Backup</button>
+            <button type="button" id="export-excel" class="button outline compact" hidden>Excel</button>
+            <button type="button" id="export-pdf" class="button outline compact" hidden>Save PDF</button>
+          </div>
+        </div>
+        <label class="search-field" for="card-search"><span>Search cards</span>
+          <input id="card-search" type="search" placeholder="Indonesian or English">
+        </label>
+        <ul id="library-cards" class="library-cards"></ul>
+        <button type="button" id="show-more" class="button outline" hidden>Show more cards</button>
+      </section>
+      <section id="quiz-view" aria-labelledby="quiz-title" hidden>
+        <div class="section-head">
+          <div>
+            <h1 id="quiz-title">Quiz</h1>
+            <p id="quiz-context"></p>
+          </div>
+          <div class="field">
+            <label for="quiz-direction">Show first</label>
+            <select id="quiz-direction">
+              <option value="id">Indonesian</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+        </div>
+        <div id="quiz-panel" class="empty-state">
+          <p id="quiz-position"></p>
+          <h2 id="quiz-prompt" tabindex="-1"></h2>
+          <form id="quiz-form">
+            <label for="quiz-answer">Your answer</label>
+            <input id="quiz-answer" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+            <div class="library-actions">
+              <button type="submit" class="button primary">Check answer</button>
+              <button type="button" id="quiz-reveal" class="button outline">Show answer</button>
+            </div>
+          </form>
+          <div id="quiz-feedback" hidden>
+            <p id="quiz-result" role="status"></p>
+            <p id="quiz-correct-answer"></p>
+            <div class="library-actions">
+              <button type="button" id="quiz-accept" class="button outline" hidden>Count my answer as correct</button>
+              <button type="button" id="quiz-next" class="button primary">Next question</button>
+            </div>
+          </div>
+          <button type="button" id="quiz-restart" class="button primary" hidden>New quiz</button>
+        </div>
+      </section>
+      <section id="capture-view" aria-labelledby="capture-title" hidden>
+        <div class="section-head">
+          <div>
+            <h1 id="capture-title">Add a card</h1>
+            <p>Capture or choose both photos, then check the wording and deck number.</p>
+          </div>
+        </div>
+        <div class="capture-camera">
+          <div class="library-actions">
+            <button type="button" id="camera-start" class="button outline">Start camera</button>
+            <button type="button" id="camera-stop" class="button outline" hidden>Stop camera</button>
+            <div class="field" id="camera-field" hidden>
+              <label for="camera-select">Camera</label>
+              <select id="camera-select"></select>
+            </div>
+          </div>
+          <div id="camera-frame" class="camera-frame" hidden>
+            <video id="camera-video" autoplay playsinline muted></video>
+            <div class="camera-guide" aria-hidden="true"></div>
+          </div>
+          <p id="camera-status" class="help-text" role="status"></p>
+        </div>
+        <form id="capture-form">
+          <div class="capture-sides">
+            <fieldset>
+              <legend>Indonesian side</legend>
+              <img id="id-photo" alt="Indonesian side of the card" hidden>
+              <div class="photo-actions">
+                <button type="button" class="button outline compact" id="id-snap" disabled>Capture Indonesian</button>
+                <label class="button outline compact photo-picker" for="id-file">Choose photo</label>
+                <input class="photo-file" type="file" id="id-file" accept="image/*">
+              </div>
+              <label for="id-text">Indonesian text</label>
+              <textarea id="id-text" lang="id" maxlength="1200" rows="2" required></textarea>
+            </fieldset>
+            <fieldset>
+              <legend>English side</legend>
+              <img id="en-photo" alt="English side and deck number" hidden>
+              <div class="photo-actions">
+                <button type="button" class="button outline compact" id="en-snap" disabled>Capture English</button>
+                <label class="button outline compact photo-picker" for="en-file">Choose photo</label>
+                <input class="photo-file" type="file" id="en-file" accept="image/*">
+              </div>
+              <label for="en-text">English text</label>
+              <textarea id="en-text" maxlength="1200" rows="2" required></textarea>
+              <label for="capture-deck">Deck number</label>
+              <input id="capture-deck" type="number" min="1" max="9007199254740991" step="1" inputmode="numeric" required>
+            </fieldset>
+          </div>
+          <div id="photo-archive" class="photo-archive library-actions" hidden>
+            <label id="keep-photos-field" hidden><input id="keep-photos" type="checkbox" checked> Keep photos on this Mac</label>
+            <button type="button" id="download-photos" class="button outline compact">Save photos to a file</button>
+          </div>
+          <p id="capture-status" class="help-text" role="status"></p>
+          <div class="library-actions">
+            <button type="submit" id="capture-save" class="button primary">Save card</button>
+            <button type="button" id="capture-cancel" class="button outline">Back to library</button>
+          </div>
+        </form>
+      </section>
+      <footer class="study-footer">Your cards and review progress are saved on this device.</footer>
+    </div>
+  </main>
+  <dialog id="import-dialog" aria-labelledby="import-title">
+    <form method="dialog" class="dialog-content">
+      <div class="dialog-head">
+        <h2 id="import-title">Import cards</h2>
+        <button type="submit" class="text-button" id="import-close">Close</button>
+      </div>
+      <p>Choose a study pack from Files or a CSV with ID, Deck, Indonesian and English columns. Reimport a newer pack to add cards or update matching IDs.</p>
+      <label class="file-label" for="card-file">Card file</label>
+      <input id="card-file" type="file" accept=".json,.csv,application/json,text/csv">
+      <p id="import-result" role="status" hidden></p>
+      <button type="button" id="import-start" class="button primary">Import</button>
+    </form>
+  </dialog>
+  <section id="print-view" aria-label="Printable flashcard collection"></section>
+  <noscript><p class="no-js">Turn on JavaScript to study your flashcards.</p></noscript>
+</body>
+</html>
