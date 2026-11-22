@@ -7,10 +7,14 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
   const editorForm = element("capture-form");
   const menu = element("deck-dialog");
   const importDialog = element("import-dialog");
+  const deleteDialog = element("delete-card-dialog");
+  const confirmDelete = element("delete-card-confirm");
+  const cancelDelete = element("delete-card-cancel");
   const selection = new Set();
   let activeDeck = null;
   let editingDeck = null;
   let editor = null;
+  let cardToDelete = null;
   let results = [];
   let limit = 50;
   const photoUrls = {};
@@ -115,11 +119,17 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
     }
     const edit = document.createElement("button");
     edit.type = "button";
-    edit.className = "text-button edit-card";
+    edit.className = "text-button";
     edit.dataset.edit = card.id;
     edit.textContent = card.needsReview ? "Review" : "Edit";
     edit.setAttribute("aria-label", edit.textContent + " card " + card.english);
-    actions.append(edit);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "text-button danger-text";
+    remove.dataset.deleteCard = card.id;
+    remove.textContent = "Delete";
+    remove.setAttribute("aria-label", "Delete card " + card.english);
+    actions.append(edit, remove);
     item.append(english, indonesian, actions);
     return item;
   }
@@ -193,6 +203,7 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
     const side = card ?? fromDraft;
     element("capture-title").textContent = card?.needsReview ? "Review card" : card ? "Edit card" : "Add manually";
     element("capture-destination").textContent = locationOf(activeDeck);
+    element("capture-delete").hidden = !card;
     element("scanner").hidden = true;
     editorForm.hidden = false;
     element("en-text").value = side.english ?? "";
@@ -220,7 +231,18 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
     if (card) enterManually({ card });
   }
 
-  async function saveCard(entry) {
+  function requestDelete(id) {
+    const card = store.data.cards.find(item => item.id === id);
+    if (!card || deleteDialog.open) return;
+    cardToDelete = card;
+    element("delete-card-preview").textContent = card.english + "\n" + card.indonesian;
+    const where = card.deck ? nameOf(card.deck) + " and the Library" : "the Library";
+    element("delete-card-effect").textContent = "This removes the card from " + where + ". Saved scan photos are kept.";
+    element("delete-card-error").textContent = "";
+    deleteDialog.showModal();
+  }
+
+  async function saveCard(entry, { existing = false } = {}) {
     const [card] = normalizeCards([{ ...entry, needsReview: false }]);
     if (entry.photos) await saveCardPhotos(card.id, entry.photos);
     await store.change(latest => {
@@ -228,6 +250,7 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
         throw new Error("This deck is unavailable. Choose another deck.");
       }
       const cards = new Map(latest.cards.map(existing => [existing.id, existing]));
+      if (existing && !cards.has(card.id)) throw new Error("This card has been deleted. Go back to the card list.");
       cards.set(card.id, { ...cards.get(card.id), ...card, needsReview: card.needsReview });
       return { ...latest, cards: [...cards.values()] };
     });
@@ -243,6 +266,7 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
     fillPhotos({});
     element("capture-title").textContent = "Scan with camera";
     element("capture-destination").textContent = "Save to " + locationOf(activeDeck);
+    element("capture-delete").hidden = true;
     editorForm.hidden = true;
     element("scanner").hidden = false;
     show("capture");
@@ -312,12 +336,14 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
   element("add-manual").addEventListener("click", () => enterManually());
   element("add-scan").addEventListener("click", startScanner);
   element("capture-cancel").addEventListener("click", () => openCollection(activeDeck));
+  const deleteFromEditor = element("capture-delete");
+  deleteFromEditor.addEventListener("click", () => requestDelete(editor?.card?.id));
   editorForm.addEventListener("submit", async event => {
     event.preventDefault();
     if (!editor) return;
     const button = element("capture-save");
     if (button.disabled) return;
-    button.disabled = true;
+    button.disabled = deleteFromEditor.disabled = true;
     const { card, draft } = editor;
     try {
       const english = element("en-text").value;
@@ -333,18 +359,47 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
       const saved = await saveCard({
         id: card?.id ?? draft.id, deck: element("capture-deck").value || null,
         english, indonesian, photos: draft.photos,
-      });
+      }, { existing: !!card });
       openCollection(activeDeck);
       setMessage(card ? "Card updated." : saved.message);
     } catch (error) {
       element("capture-status").textContent = error.message;
     } finally {
-      button.disabled = false;
+      button.disabled = deleteFromEditor.disabled = false;
+    }
+  });
+  cancelDelete.addEventListener("click", () => deleteDialog.close());
+  deleteDialog.addEventListener("cancel", event => {
+    if (confirmDelete.disabled) event.preventDefault();
+  });
+  element("delete-card-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!cardToDelete || !deleteDialog.open || confirmDelete.disabled) return;
+    const card = cardToDelete;
+    confirmDelete.disabled = cancelDelete.disabled = true;
+    try {
+      await store.change(latest => {
+        const current = latest.cards.find(item => item.id === card.id);
+        if (current && (current.deck !== card.deck || current.english !== card.english ||
+            current.indonesian !== card.indonesian)) {
+          throw new Error("This card was edited in another window. Refresh the page and check it before deleting.");
+        }
+        return { ...latest, cards: latest.cards.filter(item => item.id !== card.id) };
+      });
+      deleteDialog.close();
+      if (currentView() === "capture") openCollection(activeDeck);
+      setMessage("Card deleted.");
+      element("library-title").focus({ preventScroll: true });
+    } catch (error) {
+      element("delete-card-error").textContent = error.message;
+    } finally {
+      confirmDelete.disabled = cancelDelete.disabled = false;
     }
   });
   element("library-cards").addEventListener("click", event => {
-    const id = event.target.closest("[data-edit]")?.dataset.edit;
-    if (id) editCard(id);
+    const action = event.target.closest("[data-edit], [data-delete-card]")?.dataset;
+    if (action?.edit) editCard(action.edit);
+    if (action?.deleteCard) requestDelete(action.deleteCard);
   });
   element("library-cards").addEventListener("change", event => {
     const id = event.target.dataset.selectCard;
