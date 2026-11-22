@@ -29,11 +29,12 @@ export async function makeWorkbook(cards) {
       <c r="B${row}" s="${style}"><v>${card.deck}</v></c>
       ${textCell(`C${row}`, card.indonesian, style)}
       ${textCell(`D${row}`, card.english, style)}
+      ${textCell(`E${row}`, card.needsReview ? "Needs review" : "Reviewed", style)}
     </row>`;
   }).join("");
-  const headings = ["ID", "Deck", "Indonesian", "English"].map((label, index) =>
-    textCell(`${"ABCD"[index]}1`, label, 1)).join("");
-  const used = `A1:D${cards.length + 1}`;
+  const headings = ["ID", "Deck", "Indonesian", "English", "Review"].map((label, index) =>
+    textCell(`${"ABCDE"[index]}1`, label, 1)).join("");
+  const used = `A1:E${cards.length + 1}`;
   const entries = {
     "[Content_Types].xml": `
       <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -65,6 +66,7 @@ export async function makeWorkbook(cards) {
           <col min="1" max="1" width="43" customWidth="1"/>
           <col min="2" max="2" width="11" customWidth="1"/>
           <col min="3" max="4" width="46" customWidth="1"/>
+          <col min="5" max="5" width="17" customWidth="1"/>
         </cols>
         <sheetData><row r="1" ht="28" customHeight="1">${headings}</row>${rows}</sheetData>
         <autoFilter ref="${used}"/>

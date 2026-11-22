@@ -59,6 +59,10 @@ function deckCards() {
   return activeCards().filter(card => selectedDeck === "all" || String(card.deck) === selectedDeck);
 }
 
+function studyCards() {
+  return deckCards().filter(card => !card.needsReview);
+}
+
 function activeProgress() {
   return vault.cards.length ? vault.progress : sampleProgress;
 }
@@ -110,7 +114,7 @@ function renderDeckChoice() {
 
 function startRound(shuffle = false) {
   day = localDay();
-  const candidates = deckCards();
+  const candidates = studyCards();
   queue = newQueue(candidates, activeProgress(), direction, mode, day);
   if (shuffle) queue = shuffled(queue);
   roundSize = queue.length;
@@ -123,7 +127,14 @@ function renderRound() {
   element("study-round").hidden = !queue.length;
   element("round-done").hidden = !!queue.length;
   if (!queue.length) {
-    const ready = deckCards().filter(card => isDue(activeProgress(), direction, card, localDay())).length;
+    const reviewed = studyCards();
+    if (!reviewed.length && deckCards().length) {
+      element("done-title").textContent = "Review your scans";
+      element("done-text").textContent = "Check each scan in the Library to make it available for study.";
+      element("next-round").textContent = "Review scans";
+      return;
+    }
+    const ready = reviewed.filter(card => isDue(activeProgress(), direction, card, localDay())).length;
     element("done-title").textContent = roundSize ? "Round complete" : "You’re caught up";
     element("done-text").textContent = ready
       ? `${count(ready, "card")} ready for review.`
@@ -180,9 +191,13 @@ function advance(remembered) {
 
 function renderLibrary() {
   const query = element("card-search").value.trim().toLocaleLowerCase();
-  const results = deckCards().filter(card =>
-    !query || [card.indonesian, card.english].some(text => text.toLocaleLowerCase().includes(query))
-  );
+  const cards = deckCards();
+  const pending = cards.filter(card => card.needsReview).length;
+  element("review-field").hidden = !pending;
+  element("review-label").textContent = `Show scans to review (${pending})`;
+  if (!pending) element("only-review").checked = false;
+  const results = cards.filter(card => (!element("only-review").checked || card.needsReview) &&
+    (!query || [card.indonesian, card.english].some(text => text.toLocaleLowerCase().includes(query))));
   element("library-count").textContent = `${deckName()} · ${count(results.length, "card")}`;
   for (const id of ["export-cards", "export-excel", "export-pdf"]) element(id).hidden = !vault.cards.length;
   const entries = results.slice(0, libraryLimit).map(card => {
@@ -198,13 +213,20 @@ function renderLibrary() {
     const label = document.createElement("span");
     label.textContent = deckName(card.deck);
     info.append(label);
+    if (card.needsReview) {
+      const review = document.createElement("span");
+      review.className = "review-tag";
+      review.textContent = "Needs review";
+      info.append(review);
+    }
     if (vault.cards.length) {
       const edit = document.createElement("button");
       edit.type = "button";
       edit.className = "text-button edit-card";
       edit.dataset.edit = card.id;
-      edit.textContent = "Edit";
-      edit.setAttribute("aria-label", `Edit card ${card.indonesian}`);
+      const action = card.needsReview ? "Review" : "Edit";
+      edit.textContent = action;
+      edit.setAttribute("aria-label", `${action} card ${card.indonesian}`);
       info.append(edit);
     }
     item.append(left, right, info);
@@ -222,7 +244,7 @@ function renderLibrary() {
 
 function startQuiz() {
   quiz = {
-    cards: shuffled(deckCards()).slice(0, 10), index: 0, correct: 0,
+    cards: shuffled(studyCards()).slice(0, 10), index: 0, correct: 0,
     direction: element("quiz-direction").value, checked: false,
   };
   renderQuiz();
@@ -235,9 +257,12 @@ function renderQuiz() {
   element("quiz-feedback").hidden = true;
   element("quiz-form").hidden = !card;
   element("quiz-restart").hidden = !!card;
-  element("quiz-position").textContent = card ? `Question ${quiz.index + 1} of ${quiz.cards.length}` : "Quiz complete";
+  element("quiz-position").textContent = card ? `Question ${quiz.index + 1} of ${quiz.cards.length}`
+    : quiz.cards.length ? "Quiz complete" : "This deck has scans to review";
   prompt.lang = card ? quiz.direction : "en";
-  prompt.textContent = card ? card[languageKey[quiz.direction]] : `${quiz.correct} of ${quiz.cards.length} correct`;
+  prompt.textContent = card ? card[languageKey[quiz.direction]]
+    : quiz.cards.length ? `${quiz.correct} of ${quiz.cards.length} correct` : "Review scans to start";
+  element("quiz-restart").textContent = quiz.cards.length ? "New quiz" : "Review scans";
   const answer = element("quiz-answer");
   answer.value = "";
   answer.lang = otherLanguage(quiz.direction);
@@ -307,7 +332,7 @@ function mergeCards(cards) {
       const previous = byId.get(card.id);
       if (!previous) added += 1;
       else if (previous.deck !== card.deck || previous.english !== card.english ||
-        previous.indonesian !== card.indonesian) updated += 1;
+        previous.indonesian !== card.indonesian || previous.needsReview !== card.needsReview) updated += 1;
       byId.set(card.id, card);
     }
     if (byId.size > maxCards) throw new RangeError(`The library can hold ${number.format(maxCards)} cards.`);
@@ -324,7 +349,7 @@ const capture = setupCapture(element, (card, editing) => {
     switchView("library");
     setMessage(`Updated “${card.indonesian}” in ${deckName(card.deck)}.`);
   }
-  return `Saved “${card.indonesian}” to ${deckName(card.deck)}. Ready for the next card.`;
+  return `Saved “${card.indonesian}” to ${deckName(card.deck)}${card.needsReview ? " for review" : ""}. Ready for the next card.`;
 });
 
 const dialog = element("import-dialog");
@@ -367,7 +392,15 @@ element("export-cards").addEventListener("click", () => {
   const body = JSON.stringify({ version: packVersion, cards: vault.cards }, null, 2) + "\n";
   saveDownload(new Blob([body], { type: "application/json" }), "bahasa-cards.json");
 });
-element("export-pdf").addEventListener("click", () => saveCollectionPdf(vault.cards));
+element("export-pdf").addEventListener("click", () => {
+  const reviewed = vault.cards.filter(card => !card.needsReview);
+  if (!reviewed.length) {
+    setMessage("Review your scans before making the study PDF.");
+    return;
+  }
+  if (reviewed.length < vault.cards.length) setMessage(`The PDF includes ${count(reviewed.length, "reviewed card")}.`);
+  saveCollectionPdf(reviewed);
+});
 element("export-excel").addEventListener("click", async () => {
   const button = element("export-excel");
   button.disabled = true;
@@ -426,8 +459,18 @@ element("flashcard").addEventListener("click", () => {
 element("again").addEventListener("click", () => advance(false));
 element("remember").addEventListener("click", () => advance(true));
 element("skip").addEventListener("click", () => advance(null));
+function openReview() {
+  element("only-review").checked = true;
+  element("card-search").value = "";
+  libraryLimit = 50;
+  switchView("library");
+}
 element("next-round").addEventListener("click", () => {
-  if (!deckCards().some(card => isDue(activeProgress(), direction, card, localDay())) || mode === "all") {
+  if (!studyCards().length) {
+    openReview();
+    return;
+  }
+  if (!studyCards().some(card => isDue(activeProgress(), direction, card, localDay())) || mode === "all") {
     mode = "all";
     element("study-mode").value = mode;
   }
@@ -435,6 +478,10 @@ element("next-round").addEventListener("click", () => {
   if (queue.length) element("flashcard").focus();
 });
 element("card-search").addEventListener("input", () => {
+  libraryLimit = 50;
+  renderLibrary();
+});
+element("only-review").addEventListener("change", () => {
   libraryLimit = 50;
   renderLibrary();
 });
@@ -460,7 +507,10 @@ element("quiz-accept").addEventListener("click", () => {
   element("quiz-result").textContent = "Counted as correct";
   element("quiz-next").focus();
 });
-element("quiz-restart").addEventListener("click", startQuiz);
+element("quiz-restart").addEventListener("click", () => {
+  if (quiz.cards.length) startQuiz();
+  else openReview();
+});
 
 try { vault = loadVault(); } catch { reportStorageError(); }
 window.addEventListener("storage", event => {

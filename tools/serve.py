@@ -61,11 +61,15 @@ class LocalApp(SimpleHTTPRequestHandler):
         return host in allowed and self.headers.get("Origin", f"http://{host}") == f"http://{host}"
 
     def do_GET(self):
-        if urlsplit(self.path).path == "/api/recognition":
+        request = urlsplit(self.path)
+        if request.path in {"/api/recognition", "/api/archive"}:
             if not self.is_local_request():
-                self.json_response(403, {"error": "Open Bahasa Cards on this Mac."})
+                self.json_response(403, {"error": "Open Bahasa Studio on this Mac."})
                 return
-            self.json_response(200, {"available": self.server.reader is not None, "archive": True})
+            if request.path == "/api/recognition":
+                self.json_response(200, {"available": self.server.reader is not None, "archive": True})
+            else:
+                self.read_archive(parse_qs(request.query))
             return
         super().do_GET()
 
@@ -113,10 +117,37 @@ class LocalApp(SimpleHTTPRequestHandler):
             return
         self.json_response(200, {"lines": lines})
 
-    def archive_photos(self, parameters):
+    def archive_path(self, parameters):
         card_id = parameters.get("id", [""])[0]
         deck = parameters.get("deck", [""])[0]
         if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}", card_id) or not re.fullmatch(r"[1-9][0-9]{0,15}", deck):
+            raise ValueError("Invalid card key")
+        return self.server.photo_folder / f"Deck {deck}" / f"{card_id}-photos.zip"
+
+    def read_archive(self, parameters):
+        try:
+            source = self.archive_path(parameters)
+            if not source.is_file():
+                source = next(self.server.photo_folder.glob(f"Deck */{source.name}"), source)
+            if source.stat().st_size > MAX_ARCHIVE_BYTES:
+                raise OSError("Photo archive exceeded the size limit")
+            payload = source.read_bytes()
+        except ValueError:
+            self.json_response(400, {"error": "Check the card ID and deck number."})
+            return
+        except OSError:
+            self.json_response(404, {"error": "No saved photos for this card."})
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/zip")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def archive_photos(self, parameters):
+        try:
+            destination = self.archive_path(parameters)
+        except ValueError:
             self.json_response(400, {"error": "Check the card ID and deck number."})
             return
         payload = self.read_body(MAX_ARCHIVE_BYTES, "application/zip")
@@ -132,8 +163,7 @@ class LocalApp(SimpleHTTPRequestHandler):
         except (ValueError, zipfile.BadZipFile):
             self.json_response(400, {"error": "The photo archive could not be opened."})
             return
-        folder = self.server.photo_folder / f"Deck {deck}"
-        destination = folder / f"{card_id}-photos.zip"
+        folder = destination.parent
         try:
             folder.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryDirectory(dir=folder) as staging:

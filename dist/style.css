@@ -230,6 +230,8 @@ progress::-moz-progress-bar { background: var(--violet); border-radius: 1rem; }
 .library-card span { color: var(--muted); font-size: .875rem; }
 .card-end { display: flex; flex-wrap: wrap; align-items: center; justify-content: end; gap: .3rem; }
 .library-card .edit-card { margin: -.35rem -.45rem -.35rem .25rem; }
+.library-card .review-tag { color: #614216; background: #f9edcf; border-radius: .4rem; padding: .16rem .35rem; }
+.review-field { margin: -.45rem 0 .4rem; }
 .library-actions, .photo-actions { display: flex; flex-wrap: wrap; gap: .55rem; align-items: center; }
 .library-actions .button { min-height: 2.75rem; }
 .no-results { color: var(--muted); }

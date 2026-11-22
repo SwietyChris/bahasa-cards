@@ -18,7 +18,9 @@ For a Home Screen icon, use Safari’s **Share**, **Add to Home Screen**, and **
 
 On a Mac, run **Start Bahasa Studio.command** to open a local copy with Apple Vision handwriting recognition. macOS needs Python 3 and the Xcode Command Line Tools for recognition. The app suggests text and, when it recognizes a standalone number, the deck. Check the spelling, punctuation, and deck number against the photos. You can select **iPhone Camera** when Continuity Camera is listed. [Apple’s Continuity Camera setup](https://support.apple.com/en-us/102546)
 
-For hands-free capture on the Mac, choose which side to scan first and tap **Start auto-scan**. Follow the prompt inside the capture screen. After the first beep, flip the card for the second side. After the second beep, check the fields and tap **Save card**. With **Save scanned cards automatically** checked, the second beep saves the card and the scanner prompts for the next one. You can correct scanned text in **Library**.
+For hands-free capture on the Mac, choose which side to scan first and tap **Start auto-scan**. Follow the prompt inside the capture screen. After the first beep, flip the card for the second side. After the second beep, check the fields and tap **Save card**. With **Save and review later** checked, the second beep saves the draft and the scanner prompts for the next card.
+
+Use **Library → Show scans to review** to check the drafts. Select **Review** to compare the wording with the saved photos. Choose **Mark reviewed** to make the card available in Study, Quiz, and the study PDF. Excel and JSON backups include the saved drafts.
 
 In the hosted app you can type both fields, or paste text copied from photos with iOS Live Text. [Apple’s Live Text guide](https://support.apple.com/HT212630)
 
