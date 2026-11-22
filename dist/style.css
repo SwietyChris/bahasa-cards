@@ -281,6 +281,11 @@ progress::-moz-progress-bar { background: var(--violet); border-radius: 1rem; }
 .photo-file { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; }
 .help-text { margin: .55rem 0; color: var(--muted); font-size: .9rem; }
 .help-text:empty { display: none; }
+.scan-status { margin: .55rem 0; font-size: .95rem; color: var(--violet-dark); font-weight: 700; }
+.scan-status:empty { display: none; }
+.scan-options { margin-top: .65rem; align-items: end; gap: .55rem 1rem; }
+.auto-save-label { min-height: 2.75rem; display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .9rem; }
+.auto-save-label input, .photo-archive input { width: 1.15rem; height: 1.15rem; accent-color: var(--violet); }
 dialog {
   width: min(92vw, 31rem);
   max-height: 90vh;
