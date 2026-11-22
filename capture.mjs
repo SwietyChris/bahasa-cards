@@ -1,393 +1,330 @@
-import { normalizeCards } from "./cards.mjs";
-import { saveDownload } from "./exports.mjs";
-import { setupAutoScan } from "./autoscan.mjs";
+import { macStudio } from "./store.mjs";
 
-const sideCodes = ["id", "en"];
+const sideNames = { en: "English", id: "Bahasa Indonesia" };
 const cardRatio = 85 / 55;
-const equivalentLetters = {
-  А: "A", В: "B", Е: "E", К: "K", М: "M", Н: "H", О: "O", Р: "P",
-  С: "C", Т: "T", Х: "X", а: "a", е: "e", о: "o", р: "p", с: "c", у: "y", х: "x",
+const similarLetters = {
+  А: "A", В: "B", Е: "E", К: "K", М: "M", Н: "H", О: "O", Р: "P", С: "C", Т: "T", Х: "X",
+  а: "a", е: "e", о: "o", р: "p", с: "c", у: "y", х: "x",
 };
 
-function cardFrame(width, height) {
-  const frameWidth = Math.min(width * 0.85, height * 0.84 * cardRatio);
-  const frameHeight = frameWidth / cardRatio;
-  return { x: (width - frameWidth) / 2, y: (height - frameHeight) / 2, width: frameWidth, height: frameHeight };
+function framing(width, height) {
+  const framedWidth = Math.min(width * 0.87, height * 0.86 * cardRatio);
+  const framedHeight = framedWidth / cardRatio;
+  return { x: (width - framedWidth) / 2, y: (height - framedHeight) / 2, width: framedWidth, height: framedHeight };
 }
 
-function jpeg(canvas) {
+function takeFrame(video) {
+  const { videoWidth, videoHeight } = video;
+  if (!videoWidth || !videoHeight) throw new Error("The camera is still starting.");
+  const area = framing(videoWidth, videoHeight);
+  const scale = Math.min(1, 1600 / area.width);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(area.width * scale);
+  canvas.height = Math.round(area.height * scale);
+  const context = canvas.getContext("2d");
+  context.drawImage(video, area.x, area.y, area.width, area.height, 0, 0, canvas.width, canvas.height);
   return new Promise((resolve, reject) => {
-    canvas.toBlob(blob => {
-      if (blob) resolve(blob);
-      else reject(new Error("The photo could not be prepared."));
-    }, "image/jpeg", 0.92);
+    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Could not capture this frame.")), "image/jpeg", 0.94);
   });
 }
 
-async function preparePhoto(source, width, height, area = { x: 0, y: 0, width, height }) {
-  if (width < 1 || height < 1) throw new Error("Wait for the camera preview to become ready.");
-  const scale = Math.min(1, 1600 / Math.max(area.width, area.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(area.width * scale));
-  canvas.height = Math.max(1, Math.round(area.height * scale));
-  const context = canvas.getContext("2d");
-  context.fillStyle = "#fff";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.drawImage(source, area.x, area.y, area.width, area.height, 0, 0, canvas.width, canvas.height);
-  return jpeg(canvas);
+async function recognize(blob, side) {
+  const response = await fetch("./api/recognize?side=" + side, {
+    method: "POST", body: blob, signal: AbortSignal.timeout(12000),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error);
+  const lines = result.lines.map(line => ({ ...line, text: line.text.trim() })).filter(line => line.text);
+  lines.sort((a, b) => a.top - b.top || a.left - b.left);
+  const hasNumber = lines.length > 1 && /^#?\s*\d+\.?$/.test(lines[0].text) && lines[1].top - lines[0].top > 0.04;
+  if (hasNumber) lines.shift();
+  const raw = lines.map(line => line.text).join("\n");
+  const text = /[a-z]/i.test(raw) ? raw.replace(/[АВЕКМНОРСТХаеорсух]/gu, letter => similarLetters[letter]) : raw;
+  const key = text.normalize("NFC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  return { text, key, hasNumber };
 }
 
-function readSuggestion(lines, side) {
-  const entries = [...lines].sort((first, second) => first.top - second.top || first.left - second.left);
-  let deck = "";
-  if (side === "en") {
-    const markIndex = entries.findIndex(entry => /^#?\s*[1-9]\d*\.?$/.test(entry.text.trim()));
-    if (markIndex >= 0) {
-      deck = entries[markIndex].text.match(/\d+/)[0];
-      entries.splice(markIndex, 1);
-    }
+export async function saveCardPhotos(id, photos) {
+  if (!macStudio || (!photos.en && !photos.id)) return;
+  const zip = new globalThis.JSZip();
+  if (photos.en) zip.file("english.jpg", photos.en);
+  if (photos.id) zip.file("indonesian.jpg", photos.id);
+  const body = await zip.generateAsync({ type: "blob", mimeType: "application/zip" });
+  const response = await fetch("./api/archive?id=" + encodeURIComponent(id), {
+    method: "POST", body, signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) throw new Error("Studio could not save the photos. The capture is still here. Try saving again.");
+}
+
+export async function loadCardPhotos(id) {
+  if (!macStudio) return {};
+  const response = await fetch("./api/archive?id=" + encodeURIComponent(id));
+  if (!response.ok) return {};
+  const zip = await globalThis.JSZip.loadAsync(await response.arrayBuffer());
+  const photos = {};
+  for (const [side, name] of [["en", "english.jpg"], ["id", "indonesian.jpg"]]) {
+    const bytes = await zip.file(name)?.async("uint8array");
+    if (bytes) photos[side] = new Blob([bytes], { type: "image/jpeg" });
   }
-  const text = entries.map(entry => entry.text.trim()).filter(Boolean).join("\n");
-  return {
-    text: /[a-z]/i.test(text) ? text.replace(/[АВЕКМНОРСТХаеорсух]/gu, letter => equivalentLetters[letter]) : text,
-    deck,
-  };
+  return photos;
 }
 
-export function setupCapture(element, saveCard) {
+export function createScanner(element, { save, manual, edit }) {
   const video = element("camera-video");
   const frame = element("camera-frame");
-  const picker = element("camera-select");
-  const cameraStatus = element("camera-status");
-  const formStatus = element("capture-status");
-  const deck = element("capture-deck");
-  const archive = element("photo-archive");
-  const keepPhotos = element("keep-photos");
-  const autoButton = element("auto-scan");
-  const scanFirst = element("scan-first");
-  const captureForm = element("capture-form");
-  const sides = Object.fromEntries(sideCodes.map(code => [code, {
-    input: element(`${code}-text`),
-    photo: element(`${code}-photo`),
-    shutter: element(`${code}-snap`),
-    file: element(`${code}-file`),
-    ticket: 0,
-    suggestion: "",
-  }]));
-  let editedId = null;
-  let autoSubmit = false;
-  let draftId = "";
-  let stream = null;
-  let cameraTicket = 0;
-  let deckSuggestion = "";
-  const loopback = ["127.0.0.1", "localhost"].includes(location.hostname);
-  const mac = loopback
-    ? fetch("./api/recognition").then(response => response.ok ? response.json() : {}).catch(() => ({}))
-    : Promise.resolve({});
+  const camera = element("camera-select");
+  const status = element("scan-status");
+  const step = element("scan-step");
+  const prompt = element("scan-prompt");
+  let stream, timer, audio, current, lastSaved, generation = 0;
+  let saving = false;
+  const health = macStudio ? fetch("./api/recognition").then(response => response.json()).catch(() => ({})) : Promise.resolve({});
 
-  async function photoBundle() {
-    const zip = new globalThis.JSZip();
-    if (sides.id.blob) zip.file("indonesian.jpg", sides.id.blob);
-    if (sides.en.blob) zip.file("english.jpg", sides.en.blob);
-    return zip.generateAsync({ type: "blob", mimeType: "application/zip" });
+  function enableSound() {
+    const Audio = window.AudioContext || window.webkitAudioContext;
+    if (!Audio) return;
+    try {
+      audio ??= new Audio();
+      audio.resume().catch(() => {});
+    } catch { /* The screen also shows each capture. */ }
   }
 
-  function photoPrefix(cardDeck) {
-    return /^\d+$/.test(String(cardDeck)) ? `deck-${cardDeck}-` : "";
+  function beep(side) {
+    if (audio?.state !== "running") return;
+    const oscillator = audio.createOscillator();
+    const gain = audio.createGain();
+    const now = audio.currentTime;
+    oscillator.frequency.value = side === "en" ? 650 : 880;
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.exponentialRampToValueAtTime(0.15, now + 0.014);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+    oscillator.connect(gain).connect(audio.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.14);
   }
 
-  function cameraButtons(ready) {
-    for (const side of Object.values(sides)) side.shutter.disabled = !ready;
+  function pause() {
+    generation += 1;
+    clearTimeout(timer);
   }
 
-  function stopCamera() {
-    scanner.stop();
-    cameraTicket += 1;
-    stream?.getTracks().forEach(track => track.stop());
-    stream = null;
+  function closeCamera() {
+    pause();
+    const closing = stream;
+    stream = undefined;
+    closing?.getTracks().forEach(track => track.stop());
     video.srcObject = null;
     frame.hidden = true;
-    element("camera-start").hidden = false;
-    element("camera-start").disabled = false;
-    element("camera-stop").hidden = true;
-    autoButton.hidden = true;
-    element("scan-options").hidden = true;
     element("camera-field").hidden = true;
-    cameraStatus.textContent = "";
-    cameraButtons(false);
+    element("use-frame").hidden = true;
   }
 
-  async function startCamera(deviceId) {
-    stopCamera();
-    const ticket = cameraTicket;
-    if (!navigator.mediaDevices?.getUserMedia) {
-      cameraStatus.textContent = "To use the camera, open this app on the Mac or over HTTPS. You can also choose photos.";
-      return;
-    }
-    element("camera-start").disabled = true;
-    cameraStatus.textContent = "Opening camera…";
-    const settings = { width: { ideal: 1920 }, height: { ideal: 1080 } };
-    if (deviceId) settings.deviceId = { exact: deviceId };
-    else settings.facingMode = { ideal: "environment" };
-    try {
-      const opened = await navigator.mediaDevices.getUserMedia({ audio: false, video: settings });
-      if (ticket !== cameraTicket) {
-        opened.getTracks().forEach(track => track.stop());
-        return;
-      }
-      stream = opened;
-      video.srcObject = opened;
-      await video.play();
-      if (ticket !== cameraTicket) return;
-      updateGuide();
-      frame.hidden = false;
-      element("camera-start").hidden = true;
-      element("camera-stop").hidden = false;
-      cameraButtons(true);
-      const features = await mac;
-      if (ticket !== cameraTicket) return;
-      autoButton.hidden = !features.available;
-      element("scan-options").hidden = !features.available;
-      cameraStatus.textContent = "Fit the whole card inside the guide. Capture its Indonesian side, then its English side.";
-      const track = opened.getVideoTracks()[0];
-      track.addEventListener("ended", () => {
-        if (stream === opened) stopCamera();
-      }, { once: true });
-      const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
-      if (ticket !== cameraTicket) return;
-      const cameras = devices.filter(device => device.kind === "videoinput" && device.deviceId);
-      picker.replaceChildren(...cameras.map((device, index) =>
-        new Option(device.label || `Camera ${index + 1}`, device.deviceId)));
-      picker.value = track.getSettings().deviceId || deviceId || cameras[0]?.deviceId || "";
-      element("camera-field").hidden = cameras.length < 2;
-    } catch (error) {
-      if (ticket !== cameraTicket) return;
-      stopCamera();
-      cameraStatus.textContent = error.name === "NotAllowedError"
-        ? "Allow camera access in your browser, or choose photos from your device."
-        : "This camera is unavailable. Try the camera again or choose photos.";
-    }
+  function stop() {
+    closeCamera();
+    current = undefined;
+  }
+
+  function newCard(deck, lastKey = "") {
+    return { deck, id: "card-" + crypto.randomUUID(), sides: {}, lastKey };
   }
 
   function updateGuide() {
     const { videoWidth, videoHeight } = video;
     if (!videoWidth || !videoHeight) return;
-    const { width, height } = cardFrame(videoWidth, videoHeight);
+    const area = framing(videoWidth, videoHeight);
     frame.style.setProperty("--camera-aspect", videoWidth / videoHeight);
-    frame.style.setProperty("--guide-width", `${100 * width / videoWidth}%`);
-    frame.style.setProperty("--guide-height", `${100 * height / videoHeight}%`);
+    frame.style.setProperty("--guide-width", 100 * area.width / videoWidth + "%");
+    frame.style.setProperty("--guide-height", 100 * area.height / videoHeight + "%");
   }
 
-  function clearPhoto(side) {
-    side.ticket += 1;
-    if (side.url) URL.revokeObjectURL(side.url);
-    side.url = "";
-    side.blob = null;
-    side.newPhoto = false;
-    side.photo.removeAttribute("src");
-    side.photo.hidden = true;
-    side.file.value = "";
+  function nextSide() {
+    return current?.sides.en ? "id" : "en";
   }
 
-  function reset(card = null) {
-    editedId = card?.id ?? null;
-    draftId = editedId || `card-${crypto.randomUUID()}`;
-    element("capture-title").textContent = card?.needsReview ? "Review card" : card ? "Edit card" : "Add a card";
-    element("capture-save").textContent = card?.needsReview ? "Mark reviewed" : card ? "Save changes" : "Save card";
-    formStatus.textContent = "";
-    deck.value = card?.deck ?? "";
-    deckSuggestion = "";
-    archive.hidden = true;
-    for (const code of sideCodes) {
-      const side = sides[code];
-      clearPhoto(side);
-      side.suggestion = "";
-      side.input.value = code === "id" ? card?.indonesian ?? "" : card?.english ?? "";
-    }
-    const currentDraft = draftId;
-    mac.then(async features => {
-      if (draftId !== currentDraft) return;
-      element("keep-photos-field").hidden = !features.archive;
-      if (!formStatus.textContent) {
-        formStatus.textContent = features.available
-          ? "The Mac can suggest text from photos. Check both sides and the deck number before saving."
-          : "Enter the wording from each photo. On iPhone or iPad you can also paste text copied with Live Text.";
-      }
-      if (features.archive && card) {
+  function beginReading() {
+    pause();
+    if (!current || !stream) return;
+    const side = nextSide();
+    const starting = generation;
+    const previous = side === "en" ? current.lastKey : current.sides.en.key;
+    let lastRead = "";
+    let unreadable = 0;
+    step.textContent = side === "en" ? "1 of 2 · English" : "2 of 2 · Bahasa Indonesia";
+    prompt.textContent = side === "en" ? "Hold up the English side" : "Flip the card to Bahasa Indonesia";
+    status.textContent = "Keep the writing inside the guide and hold the card still.";
+    element("use-frame").hidden = false;
+
+    async function read() {
+      if (starting !== generation) return;
+      if (!document.hidden) {
         try {
-          const response = await fetch(`./api/archive?deck=${card.deck}&id=${encodeURIComponent(card.id)}`);
-          if (!response.ok) return;
-          const photos = await globalThis.JSZip.loadAsync(await response.arrayBuffer());
-          const blobs = await Promise.all(["indonesian.jpg", "english.jpg"].map(async name => {
-            const bytes = await photos.file(name)?.async("uint8array");
-            return bytes ? new Blob([bytes], { type: "image/jpeg" }) : null;
-          }));
-          if (draftId !== currentDraft) return;
-          for (const [index, code] of sideCodes.entries()) {
-            if (blobs[index] && !sides[code].blob) showPhoto(code, blobs[index], false);
+          const blob = await takeFrame(video);
+          const result = await recognize(blob, side);
+          if (starting !== generation) return;
+          const hasText = result.key && (side !== "en" || !/^\d+$/.test(result.key));
+          if (hasText && result.key === previous) {
+            lastRead = "";
+            unreadable = 0;
+            status.textContent = side === "en" ? "Show the next card’s English side."
+              : "English captured. Flip the same card.";
+          } else if (hasText && !(side === "id" && result.hasNumber)) {
+            if (lastRead === result.key) {
+              accept(side, blob, result);
+              return;
+            }
+            lastRead = result.key;
+          } else {
+            lastRead = "";
+            unreadable += 1;
           }
-          if (card.needsReview) formStatus.textContent = "Check both photos and the deck number, then mark this card reviewed.";
-          scanner.resume();
-        } catch { /* The transcribed fields are still available for review. */ }
+        } catch {
+          lastRead = "";
+          unreadable += 1;
+        }
+        if (unreadable >= 8) status.textContent = "Move the card closer, improve the light, or choose Use this frame.";
       }
-    });
-    scanner.resume();
-  }
-
-  function showPhoto(code, blob, newPhoto = true) {
-    const side = sides[code];
-    if (side.url) URL.revokeObjectURL(side.url);
-    side.blob = blob;
-    side.newPhoto = newPhoto;
-    side.url = URL.createObjectURL(blob);
-    side.photo.src = side.url;
-    side.photo.hidden = false;
-    archive.hidden = false;
-  }
-
-  function takeFrame() {
-    const { videoWidth, videoHeight } = video;
-    return preparePhoto(video, videoWidth, videoHeight, cardFrame(videoWidth, videoHeight));
-  }
-
-  async function recognizePhoto(blob, code, extractDeck = code === "en") {
-    const response = await fetch(`./api/recognize?side=${code}`, {
-      method: "POST", body: blob, signal: AbortSignal.timeout(35000),
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error);
-    return readSuggestion(result.lines, extractDeck ? "en" : "id");
-  }
-
-  function fillSuggestion(code, suggested, originalText, originalDeck) {
-    const side = sides[code];
-    if (side.input.value === originalText && (!originalText || originalText === side.suggestion) && suggested.text) {
-      side.input.value = suggested.text.slice(0, 1200);
-      side.suggestion = side.input.value;
+      if (starting === generation) timer = setTimeout(read, 470);
     }
-    if (code === "en" && deck.value === originalDeck && (!originalDeck || originalDeck === deckSuggestion) && suggested.deck) {
-      deck.value = suggested.deck;
-      deckSuggestion = suggested.deck;
-    }
+    timer = setTimeout(read, 220);
   }
 
-  async function receivePhoto(code, producer) {
-    scanner.stop();
-    const side = sides[code];
-    const ticket = ++side.ticket;
-    const originalText = side.input.value;
-    const originalDeck = deck.value;
+  function draft() {
+    return {
+      id: current.id, deck: current.deck,
+      english: current.sides.en?.text ?? "",
+      indonesian: current.sides.id?.text ?? "",
+      photos: { en: current.sides.en?.blob, id: current.sides.id?.blob },
+    };
+  }
+
+  async function savePair() {
+    if (!current || saving) return;
+    const entry = current;
+    saving = true;
+    camera.disabled = true;
+    element("scan-retry").hidden = true;
+    prompt.textContent = "Saving card…";
+    status.textContent = "";
     try {
-      const blob = await producer();
-      if (ticket !== side.ticket) return;
-      showPhoto(code, blob);
-      if (!(await mac).available) {
-        formStatus.textContent = "Photo ready. Enter or paste the wording and check the deck number.";
+      const result = await save(draft());
+      if (entry !== current) return;
+      lastSaved = result.card.id;
+      element("scan-success").textContent = result.message;
+      element("saved-english").textContent = result.card.english;
+      element("saved-indonesian").textContent = result.card.indonesian;
+      element("scan-result").hidden = false;
+      current = newCard(entry.deck, entry.sides.id.key);
+      beginReading();
+    } catch (error) {
+      if (entry !== current) return;
+      prompt.textContent = "The card is ready to save";
+      status.textContent = error.message;
+      element("scan-retry").hidden = false;
+    } finally {
+      saving = false;
+      camera.disabled = false;
+    }
+  }
+
+  function accept(side, blob, result) {
+    pause();
+    current.sides[side] = { ...result, blob };
+    beep(side);
+    if (side === "en") beginReading();
+    else if (current.sides.en.text && current.sides.id.text) savePair();
+    else manual(draft());
+  }
+
+  async function openCamera(deviceId) {
+    if (saving) return;
+    closeCamera();
+    const starting = generation;
+    element("camera-start").hidden = true;
+    element("mac-scanner-help").hidden = true;
+    step.textContent = "";
+    prompt.textContent = "Opening camera…";
+    status.textContent = "";
+    const features = await health;
+    if (starting !== generation) return;
+    if (!features.available || !navigator.mediaDevices?.getUserMedia) {
+      prompt.textContent = "Camera scanning is unavailable here";
+      element("mac-scanner-help").hidden = macStudio;
+      status.textContent = macStudio ? "Restart Mac Studio to reconnect handwriting recognition, or type the text." : "";
+      return;
+    }
+    try {
+      const requested = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+      if (deviceId) requested.deviceId = { exact: deviceId };
+      const opened = await navigator.mediaDevices.getUserMedia({ video: requested, audio: false });
+      if (starting !== generation) {
+        opened.getTracks().forEach(track => track.stop());
         return;
       }
-      if (ticket !== side.ticket) return;
-      formStatus.textContent = "Reading handwriting on this Mac…";
-      const suggested = await recognizePhoto(blob, code);
-      if (ticket !== side.ticket) return;
-      fillSuggestion(code, suggested, originalText, originalDeck);
-      formStatus.textContent = "Check the photo and fill in any missing fields before saving.";
+      stream = opened;
+      video.srcObject = opened;
+      frame.hidden = false;
+      await video.play();
+      if (starting !== generation) return;
+      updateGuide();
+      const track = opened.getVideoTracks()[0];
+      track.addEventListener("ended", () => {
+        if (stream !== opened) return;
+        closeCamera();
+        prompt.textContent = "Camera disconnected";
+        element("camera-start").hidden = false;
+      }, { once: true });
+      const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+      if (starting !== generation) return;
+      const cameras = devices.filter(device => device.kind === "videoinput" && device.deviceId);
+      camera.replaceChildren(...cameras.map((device, index) =>
+        new Option(device.label || "Camera " + (index + 1), device.deviceId)));
+      camera.value = track.getSettings().deviceId || deviceId || cameras[0]?.deviceId || "";
+      element("camera-field").hidden = cameras.length < 2;
+      beginReading();
     } catch (error) {
-      if (ticket === side.ticket) formStatus.textContent = error.message || "Enter the text beside the photo.";
+      if (starting !== generation) return;
+      closeCamera();
+      prompt.textContent = "Could not open the camera";
+      status.textContent = error.name === "NotAllowedError"
+        ? "Allow camera access for Mac Studio in your browser, then retry."
+        : "Check that your camera is connected and available, then retry.";
+      element("camera-start").hidden = false;
     }
   }
 
-  const scanner = setupAutoScan({
-    button: autoButton,
-    status: element("scan-status"),
-    nextSide: () => {
-      const order = scanFirst.value === "en" ? ["en", "id"] : sideCodes;
-      return order.find(code => !sides[code].blob);
-    },
-    sample: takeFrame,
-    recognize: (blob, code) => recognizePhoto(blob, code, true),
-    accept(code, blob, suggested) {
-      showPhoto(code, blob);
-      fillSuggestion(code, suggested, sides[code].input.value, deck.value);
-    },
-    pairReady() {
-      if (!editedId && element("auto-save").checked) {
-        autoSubmit = true;
-        captureForm.requestSubmit();
-        autoSubmit = false;
-      }
-    },
-  });
-
-  for (const code of sideCodes) {
-    const side = sides[code];
-    side.shutter.addEventListener("click", () => receivePhoto(code, takeFrame));
-    side.file.addEventListener("change", () => {
-      const file = side.file.files[0];
-      if (!file) return;
-      receivePhoto(code, async () => {
-        const url = URL.createObjectURL(file);
-        const source = new Image();
-        source.src = url;
-        try {
-          await source.decode();
-          return await preparePhoto(source, source.naturalWidth, source.naturalHeight);
-        } catch {
-          throw new Error("This image could not be opened. Try a JPEG or PNG photo.");
-        } finally {
-          URL.revokeObjectURL(url);
-          side.file.value = "";
-        }
-      });
-    });
+  function start(deck) {
+    stop();
+    enableSound();
+    current = newCard(deck);
+    lastSaved = undefined;
+    element("scan-result").hidden = true;
+    element("scan-retry").hidden = true;
+    openCamera();
   }
 
-  element("camera-start").addEventListener("click", () => startCamera());
-  element("camera-stop").addEventListener("click", stopCamera);
+  element("use-frame").addEventListener("click", async () => {
+    if (!current || !stream) return;
+    pause();
+    const starting = generation;
+    const side = nextSide();
+    element("use-frame").hidden = true;
+    try {
+      const blob = await takeFrame(video);
+      const result = await recognize(blob, side).catch(() => ({ text: "", key: "" }));
+      if (starting === generation) accept(side, blob, result);
+    } catch (error) {
+      if (starting === generation) {
+        beginReading();
+        status.textContent = error.message;
+      }
+    }
+  });
+  element("camera-start").addEventListener("click", () => { enableSound(); openCamera(); });
+  element("scan-retry").addEventListener("click", savePair);
+  element("type-instead").addEventListener("click", () => current && manual(draft()));
+  element("edit-last-card").addEventListener("click", () => lastSaved && edit(lastSaved));
+  camera.addEventListener("change", () => openCamera(camera.value));
   video.addEventListener("resize", updateGuide);
-  picker.addEventListener("change", () => startCamera(picker.value));
-  scanFirst.addEventListener("change", () => scanner.resume());
-  window.addEventListener("pagehide", stopCamera);
-  element("download-photos").addEventListener("click", async () => {
-    try {
-      const filename = `${photoPrefix(deck.value)}${draftId}-photos.zip`;
-      saveDownload(await photoBundle(), filename);
-    } catch {
-      formStatus.textContent = "The photo file could not be created. Try saving it again.";
-    }
-  });
-  captureForm.addEventListener("submit", async event => {
-    event.preventDefault();
-    const button = element("capture-save");
-    if (button.disabled) return;
-    button.disabled = true;
-    try {
-      const editing = !!editedId;
-      const [card] = normalizeCards([{
-        id: draftId,
-        deck: deck.value,
-        indonesian: sides.id.input.value,
-        english: sides.en.input.value,
-        needsReview: autoSubmit,
-      }]);
-      let archived = false;
-      if ((await mac).archive && keepPhotos.checked && sideCodes.some(code => sides[code].newPhoto)) {
-        const response = await fetch(`./api/archive?deck=${card.deck}&id=${encodeURIComponent(card.id)}`, {
-          method: "POST", body: await photoBundle(), signal: AbortSignal.timeout(15000),
-        });
-        if (!response.ok) throw new Error("Photos could not be saved on the Mac. Try again or clear Keep photos.");
-        archived = true;
-      }
-      const label = saveCard(card, editing);
-      if (!editing) {
-        reset();
-        formStatus.textContent = archived ? `${label} Photos saved on this Mac.` : label;
-        (stream ? sides.id.shutter : sides.id.input).focus();
-      }
-    } catch (error) {
-      formStatus.textContent = error.message;
-    } finally {
-      button.disabled = false;
-    }
-  });
-  return { reset, stopCamera, get editing() { return editedId !== null; } };
+  window.addEventListener("pagehide", stop);
+  return { start, stop };
 }

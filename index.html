@@ -23,15 +23,16 @@
         <span class="brand-name"><span class="brand-owner">Wei-Chien’s</span>Bahasa <strong>Studio</strong></span>
       </div>
       <nav aria-label="Main">
-        <button type="button" id="study-tab" class="nav-button" aria-current="page">Study</button>
+        <button type="button" id="decks-tab" class="nav-button" aria-current="page">Decks</button>
         <button type="button" id="library-tab" class="nav-button">Library</button>
+        <button type="button" id="study-tab" class="nav-button">Study</button>
         <button type="button" id="quiz-tab" class="nav-button">Quiz</button>
       </nav>
-      <button type="button" id="capture-open" class="button primary compact">Add cards</button>
+      <button type="button" id="new-deck" class="button primary compact">New deck</button>
     </div>
   </header>
-  <main class="layout">
-    <aside class="decks" aria-labelledby="decks-title">
+  <main class="layout manage-layout">
+    <aside class="decks" aria-labelledby="decks-title" hidden>
       <div class="decks-top">
         <h2 id="decks-title">Decks</h2>
         <span id="total-cards"></span>
@@ -43,13 +44,20 @@
       </div>
     </aside>
     <div class="content">
-      <div class="sample-note" id="sample-note">
-        <span><strong>Sample cards</strong> · Add or import cards to start your collection.</span>
-        <button type="button" id="import-first" class="text-button">Import deck</button>
-      </div>
       <p id="message" class="page-message" role="status" hidden></p>
-      <p id="storage-message" class="page-message" role="status" hidden>Storage is unavailable on this device. Keep a copy of your cards so you can import them again.</p>
-      <section id="study-view" aria-labelledby="study-title">
+      <p id="storage-message" class="page-message" role="status" hidden></p>
+      <section id="decks-view" aria-labelledby="decks-heading">
+        <div class="section-head">
+          <div>
+            <h1 id="decks-heading">Decks</h1>
+            <p id="deck-summary" role="status"></p>
+          </div>
+          <button type="button" id="import-first" class="button outline compact">Import deck</button>
+        </div>
+        <ul id="deck-tiles" class="deck-tiles"></ul>
+        <p id="no-decks" class="empty-state" hidden>Create a deck to start adding cards. Cards in the Library can also be assigned to a deck later.</p>
+      </section>
+      <section id="study-view" aria-labelledby="study-title" hidden>
         <div class="section-head">
           <div>
             <h1 id="study-title">Study</h1>
@@ -106,16 +114,31 @@
             <p id="library-count" role="status"></p>
           </div>
           <div class="library-actions">
+            <button type="button" id="rename-deck" class="button outline compact" hidden>Rename deck</button>
+            <button type="button" id="study-deck" class="button outline compact" hidden>Study deck</button>
             <button type="button" id="import-open" class="button outline compact">Import</button>
-            <button type="button" id="export-cards" class="button outline compact" hidden>Backup</button>
-            <button type="button" id="export-excel" class="button outline compact" hidden>Excel</button>
-            <button type="button" id="export-pdf" class="button outline compact" hidden>Save PDF</button>
+            <button type="button" id="export-cards" class="button outline compact">Backup</button>
           </div>
         </div>
+        <div class="library-actions add-actions">
+          <button type="button" id="add-manual" class="button primary">Add manually</button>
+          <button type="button" id="add-scan" class="button outline">Scan with camera</button>
+        </div>
         <label class="search-field" for="card-search"><span>Search cards</span>
-          <input id="card-search" type="search" placeholder="Indonesian or English">
+          <input id="card-search" type="search" placeholder="English, Indonesian, or deck name">
         </label>
-        <label id="review-field" class="auto-save-label review-field" hidden><input type="checkbox" id="only-review"> <span id="review-label"></span></label>
+        <div class="library-tools">
+          <div class="library-actions" id="library-select">
+            <button type="button" id="select-all" class="button outline compact">Select all</button>
+            <button type="button" id="deselect-all" class="button outline compact" disabled>Deselect all</button>
+            <span id="selection-count" role="status">0 selected</span>
+          </div>
+          <div class="library-actions" aria-label="Export cards">
+            <button type="button" id="export-excel" class="button outline compact">Export Excel</button>
+            <button type="button" id="export-pdf" class="button outline compact">Export PDF</button>
+          </div>
+        </div>
+        <label id="review-field" class="review-field" hidden><input type="checkbox" id="only-review"> <span id="review-label"></span></label>
         <ul id="library-cards" class="library-cards"></ul>
         <button type="button" id="show-more" class="button outline" hidden>Show more cards</button>
       </section>
@@ -159,14 +182,26 @@
         <div class="section-head">
           <div>
             <h1 id="capture-title">Add a card</h1>
-            <p>Capture or choose both photos, then check the wording and deck number.</p>
+            <p id="capture-destination"></p>
           </div>
+          <button type="button" id="capture-cancel" class="button outline compact">Back</button>
         </div>
-        <div class="capture-camera">
+        <div id="scanner" class="capture-camera" hidden>
+          <div id="scan-result" class="scan-result" hidden>
+            <p id="scan-success" role="status"></p>
+            <p id="saved-english"></p>
+            <p id="saved-indonesian" lang="id"></p>
+            <button type="button" id="edit-last-card" class="text-button">Edit saved card</button>
+          </div>
+          <div class="scan-head">
+            <p id="scan-step"></p>
+            <h2 id="scan-prompt" role="status">Hold up the English side</h2>
+            <p id="scan-status" class="help-text" role="status"></p>
+          </div>
           <div class="library-actions">
-            <button type="button" id="camera-start" class="button outline">Start camera</button>
-            <button type="button" id="camera-stop" class="button outline" hidden>Stop camera</button>
-            <button type="button" id="auto-scan" class="button outline" hidden>Start auto-scan</button>
+            <button type="button" id="camera-start" class="button primary" hidden>Retry camera</button>
+            <button type="button" id="scan-retry" class="button primary" hidden>Retry save</button>
+            <button type="button" id="use-frame" class="button outline compact" hidden>Use this frame</button>
             <div class="field" id="camera-field" hidden>
               <label for="camera-select">Camera</label>
               <select id="camera-select"></select>
@@ -176,58 +211,39 @@
             <video id="camera-video" autoplay playsinline muted></video>
             <div class="camera-guide" aria-hidden="true"></div>
           </div>
-          <div id="scan-options" class="library-actions scan-options" hidden>
-            <div class="field">
-              <label for="scan-first">Scan first</label>
-              <select id="scan-first">
-                <option value="id">Indonesian side</option>
-                <option value="en">English side</option>
-              </select>
-            </div>
-            <label class="auto-save-label"><input type="checkbox" id="auto-save"> Save and review later</label>
+          <div id="mac-scanner-help" class="empty-state" hidden>
+            <h2>Open Mac Studio to scan</h2>
+            <p>On the Mac, open Start Bahasa Studio.command in Finder. Then open the deck or the Library in Mac Studio and choose Scan with camera.</p>
+            <a class="button outline compact" href="http://127.0.0.1:8765/">Open Mac Studio</a>
           </div>
-          <p id="camera-status" class="help-text" role="status"></p>
-          <p id="scan-status" class="scan-status" role="status"></p>
+          <button type="button" id="type-instead" class="text-button">Type instead</button>
         </div>
-        <form id="capture-form">
+        <form id="capture-form" hidden>
           <div class="capture-sides">
             <fieldset>
-              <legend>Indonesian side</legend>
-              <img id="id-photo" alt="Indonesian side of the card" hidden>
-              <div class="photo-actions">
-                <button type="button" class="button outline compact" id="id-snap" disabled>Capture Indonesian</button>
-                <label class="button outline compact photo-picker" for="id-file">Choose photo</label>
-                <input class="photo-file" type="file" id="id-file" accept="image/*">
-              </div>
-              <label for="id-text">Indonesian text</label>
-              <textarea id="id-text" lang="id" maxlength="1200" rows="2" required></textarea>
+              <legend>English</legend>
+              <img id="en-photo" alt="English side of the card" hidden>
+              <label class="visually-hidden" for="en-text">English text</label>
+              <textarea id="en-text" maxlength="1200" rows="3" required></textarea>
             </fieldset>
             <fieldset>
-              <legend>English side</legend>
-              <img id="en-photo" alt="English side and deck number" hidden>
-              <div class="photo-actions">
-                <button type="button" class="button outline compact" id="en-snap" disabled>Capture English</button>
-                <label class="button outline compact photo-picker" for="en-file">Choose photo</label>
-                <input class="photo-file" type="file" id="en-file" accept="image/*">
-              </div>
-              <label for="en-text">English text</label>
-              <textarea id="en-text" maxlength="1200" rows="2" required></textarea>
-              <label for="capture-deck">Deck number</label>
-              <input id="capture-deck" type="number" min="1" max="9007199254740991" step="1" inputmode="numeric" required>
+              <legend>Bahasa Indonesia</legend>
+              <img id="id-photo" alt="Indonesian side of the card" hidden>
+              <label class="visually-hidden" for="id-text">Indonesian text</label>
+              <textarea id="id-text" lang="id" maxlength="1200" rows="3" required></textarea>
             </fieldset>
           </div>
-          <div id="photo-archive" class="photo-archive library-actions" hidden>
-            <label id="keep-photos-field" hidden><input id="keep-photos" type="checkbox" checked> Keep photos on this Mac</label>
-            <button type="button" id="download-photos" class="button outline compact">Save photos to a file</button>
+          <div class="field editor-deck" id="editor-deck-field">
+            <label for="capture-deck">Assign to deck</label>
+            <select id="capture-deck"></select>
           </div>
           <p id="capture-status" class="help-text" role="status"></p>
           <div class="library-actions">
             <button type="submit" id="capture-save" class="button primary">Save card</button>
-            <button type="button" id="capture-cancel" class="button outline">Back to library</button>
           </div>
         </form>
       </section>
-      <footer class="study-footer">Your cards and review progress are saved on this device.</footer>
+      <footer id="storage-footer" class="study-footer"></footer>
     </div>
   </main>
   <dialog id="import-dialog" aria-labelledby="import-title">
@@ -241,6 +257,18 @@
       <input id="card-file" type="file" accept=".json,.csv,application/json,text/csv">
       <p id="import-result" role="status" hidden></p>
       <button type="button" id="import-start" class="button primary">Import</button>
+    </form>
+  </dialog>
+  <dialog id="deck-dialog" aria-labelledby="deck-dialog-title">
+    <form id="deck-form" class="dialog-content">
+      <div class="dialog-head">
+        <h2 id="deck-dialog-title">New deck</h2>
+        <button type="button" id="deck-close" class="text-button">Cancel</button>
+      </div>
+      <label class="file-label" for="deck-name">Deck name</label>
+      <input id="deck-name" type="text" maxlength="80" required placeholder="Deck 1">
+      <p id="deck-error" class="help-text" role="status"></p>
+      <button type="submit" id="deck-save" class="button primary">Create deck</button>
     </form>
   </dialog>
   <section id="print-view" aria-label="Printable flashcard collection"></section>

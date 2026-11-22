@@ -26,15 +26,16 @@ export async function makeWorkbook(cards) {
     const rowPoints = Math.max(rowHeight(card.indonesian), rowHeight(card.english));
     return `<row r="${row}" ht="${rowPoints}" customHeight="1">
       ${textCell(`A${row}`, card.id, style)}
-      <c r="B${row}" s="${style}"><v>${card.deck}</v></c>
-      ${textCell(`C${row}`, card.indonesian, style)}
-      ${textCell(`D${row}`, card.english, style)}
+      ${textCell(`B${row}`, card.deckLabel, style)}
+      ${textCell(`C${row}`, card.english, style)}
+      ${textCell(`D${row}`, card.indonesian, style)}
       ${textCell(`E${row}`, card.needsReview ? "Needs review" : "Reviewed", style)}
+      ${textCell(`F${row}`, card.deck ?? "", style)}
     </row>`;
   }).join("");
-  const headings = ["ID", "Deck", "Indonesian", "English", "Review"].map((label, index) =>
-    textCell(`${"ABCDE"[index]}1`, label, 1)).join("");
-  const used = `A1:E${cards.length + 1}`;
+  const headings = ["Card ID", "Deck", "English", "Indonesian", "Review", "Deck ID"].map((label, index) =>
+    textCell(`${"ABCDEF"[index]}1`, label, 1)).join("");
+  const used = `A1:F${cards.length + 1}`;
   const entries = {
     "[Content_Types].xml": `
       <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -64,9 +65,10 @@ export async function makeWorkbook(cards) {
         <sheetFormatPr defaultRowHeight="22"/>
         <cols>
           <col min="1" max="1" width="43" customWidth="1"/>
-          <col min="2" max="2" width="11" customWidth="1"/>
+          <col min="2" max="2" width="21" customWidth="1"/>
           <col min="3" max="4" width="46" customWidth="1"/>
           <col min="5" max="5" width="17" customWidth="1"/>
+          <col min="6" max="6" width="42" hidden="1" customWidth="1"/>
         </cols>
         <sheetData><row r="1" ht="28" customHeight="1">${headings}</row>${rows}</sheetData>
         <autoFilter ref="${used}"/>
