@@ -1,33 +1,27 @@
 # Wei-Chien’s Bahasa Studio
 
-Wei-Chien’s Bahasa Studio turns two-sided Indonesian–English paper flashcards into study decks. The number on the English side is the deck number.
+Create Indonesian–English flashcards, organize them into named decks, and study them in either direction.
 
-## Study on iPhone or iPad
+## Build your decks on the Mac
 
-Open [Wei-Chien’s Bahasa Studio](https://swietychris.github.io/bahasa-cards/) in Safari. To bring over a collection, save its JSON deck file to Files, tap **Import deck** and choose the file. Tap a card to flip it. **Again** brings it back in the same round. **Got it** schedules the next review. **Quiz** lets you type the translation in either direction.
+1. Double-click **Start Bahasa Studio.command** in Finder. It opens Mac Studio at <http://127.0.0.1:8765/>. Leave its Terminal window open while you work.
+2. Choose **New deck**, type a name and select **Create deck**. Open a deck from **Decks** to add cards, rename it, or study it.
+3. Choose **Add manually** to type English first and Bahasa Indonesia second. Choose **Scan with camera** to read paper cards.
 
-For a Home Screen icon, use Safari’s **Share**, **Add to Home Screen**, and **Open as Web App** if shown. Add the icon before importing if you plan to study there. [Apple’s iPhone guide](https://support.apple.com/guide/iphone/iphea86e5236/ios)
+For scanning, allow camera access when your browser asks. Hold the English side inside the guide until the first beep. Flip the same card to Bahasa Indonesia and hold it steady until the second beep. Studio saves the pair and shows the saved wording before prompting for the next card. **Use this frame** can capture a difficult side, and **Type instead** lets you finish the entry by hand. An iPhone listed in the camera menu works through Continuity Camera. [Apple’s Continuity Camera guide](https://support.apple.com/en-us/102546)
 
-**Library → Backup** saves a deck file you can send to another device. **Excel** saves a searchable workbook and **Save PDF** makes a printable reference. Cards and review progress are stored in the browser on each device. Import a newer backup to bring over new or changed cards. Keep a copy of the JSON backup in Files.
+Studio uses the deck you opened. A card added from the **Library** starts unassigned unless you select a deck in the manual form. Use **Edit** in a deck or the Library to check the words, correct either side, or change the assignment. The Mac opens the archived photos alongside the text.
 
-## Digitize cards
+## Save, export, and share
 
-1. Open **Add cards** and select **Start camera**. A guide sized to the proportions of an 85 × 55 mm card frames the shot. You can also choose photos already on the device.
-2. Capture the Indonesian side. Flip that card and capture the English side, keeping the deck number visible.
-3. Check both text fields and the deck number. Choose **Save card**. The form is ready for the next card, with the camera still on. Turn it off with **Stop camera**.
+- **Export Excel** and **Export PDF** in a deck export its complete list. In **Library**, check individual cards or use **Select all** and **Deselect all** before exporting. When a filter is active, **Select matches** selects all matching cards.
+- Mac Studio stores the collection in `~/Documents/Codex/Bahasa Studio/collection.json`. Captured photos are kept by card ID in `~/Documents/Codex/Bahasa Studio Photos/By card`.
+- When you are ready to share, **Library → Backup** saves the named decks and their cards as a JSON file. Share that file privately. In Safari on an iPhone or iPad, open the Studio and tap **Import deck**. Edits made there are stored on that device and can be transferred with a new backup. [Open the study site](https://swietychris.github.io/bahasa-cards/)
 
-On a Mac, run **Start Bahasa Studio.command** to open a local copy with Apple Vision handwriting recognition. macOS needs Python 3 and the Xcode Command Line Tools for recognition. The app suggests text and, when it recognizes a standalone number, the deck. Check the spelling, punctuation, and deck number against the photos. You can select **iPhone Camera** when Continuity Camera is listed. [Apple’s Continuity Camera setup](https://support.apple.com/en-us/102546)
-
-For hands-free capture on the Mac, choose which side to scan first and tap **Start auto-scan**. Follow the prompt inside the capture screen. After the first beep, flip the card for the second side. After the second beep, check the fields and tap **Save card**. With **Save and review later** checked, the second beep saves the draft and the scanner prompts for the next card.
-
-Use **Library → Show scans to review** to check the drafts. Select **Review** to compare the wording with the saved photos. Choose **Mark reviewed** to make the card available in Study, Quiz, and the study PDF. Excel and JSON backups include the saved drafts.
-
-In the hosted app you can type both fields, or paste text copied from photos with iOS Live Text. [Apple’s Live Text guide](https://support.apple.com/HT212630)
-
-To retain the photos, leave **Keep photos on this Mac** checked. Saving a card also saves a ZIP of the photos in **Documents / Codex / Bahasa Studio Photos**, grouped by deck. The card ID in the filename matches the Excel and backup files. From the hosted site, tap **Save photos to a file** before saving the card. Keep those ZIPs with your other deck files.
+**Study** flips the card and schedules review. **Quiz** checks a typed answer. An optional Home Screen icon is available in Safari’s Share menu. [Apple’s iPhone Home Screen guide](https://support.apple.com/guide/iphone/iphea86e5236/ios)
 
 ## Project
 
-The web app is buildless HTML, CSS, and JavaScript in `dist/`. The GitHub Pages site serves the root of the `gh-pages` branch, which contains only `dist/`. To update it after committing changes to the source branch, run `git subtree push --prefix dist origin gh-pages`. Increment the version in `dist/sw.js` when changing cached files.
+The buildless web app lives in `dist/`. GitHub Pages serves the root of `gh-pages`, which contains this directory. After committing a source change, run `git subtree push --prefix dist origin gh-pages`. Increment the cache version in `dist/sw.js` when changing cached assets.
 
-For local development, run `python3 tools/serve.py` and open the printed address. It listens on loopback and serves the app and the Mac-only Vision helper. The hosted app uses the camera only when **Start camera** is selected, and records only the confirmed text and deck number in the collection.
+Mac Studio runs a loopback Python 3 server. It uses the Xcode Command Line Tools and Apple Vision to read camera frames locally. Use `python3 tools/serve.py` for development. A separate collection and archive can be selected with `--collection` and `--photo-folder` for testing. JSON backups accept version 1 and version 2. CSV imports accept ID or Card ID, Deck, English, and Indonesian headers, plus optional Deck ID and Review.
