@@ -75,6 +75,7 @@ export function setupCapture(element, saveCard) {
     suggestion: "",
   }]));
   let editedId = null;
+  let autoSubmit = false;
   let draftId = "";
   let stream = null;
   let cameraTicket = 0;
@@ -182,6 +183,7 @@ export function setupCapture(element, saveCard) {
     if (side.url) URL.revokeObjectURL(side.url);
     side.url = "";
     side.blob = null;
+    side.newPhoto = false;
     side.photo.removeAttribute("src");
     side.photo.hidden = true;
     side.file.value = "";
@@ -190,7 +192,8 @@ export function setupCapture(element, saveCard) {
   function reset(card = null) {
     editedId = card?.id ?? null;
     draftId = editedId || `card-${crypto.randomUUID()}`;
-    element("capture-title").textContent = card ? "Edit card" : "Add a card";
+    element("capture-title").textContent = card?.needsReview ? "Review card" : card ? "Edit card" : "Add a card";
+    element("capture-save").textContent = card?.needsReview ? "Mark reviewed" : card ? "Save changes" : "Save card";
     formStatus.textContent = "";
     deck.value = card?.deck ?? "";
     deckSuggestion = "";
@@ -201,21 +204,41 @@ export function setupCapture(element, saveCard) {
       side.suggestion = "";
       side.input.value = code === "id" ? card?.indonesian ?? "" : card?.english ?? "";
     }
-    mac.then(features => {
+    const currentDraft = draftId;
+    mac.then(async features => {
+      if (draftId !== currentDraft) return;
       element("keep-photos-field").hidden = !features.archive;
       if (!formStatus.textContent) {
         formStatus.textContent = features.available
           ? "The Mac can suggest text from photos. Check both sides and the deck number before saving."
           : "Enter the wording from each photo. On iPhone or iPad you can also paste text copied with Live Text.";
       }
+      if (features.archive && card) {
+        try {
+          const response = await fetch(`./api/archive?deck=${card.deck}&id=${encodeURIComponent(card.id)}`);
+          if (!response.ok) return;
+          const photos = await globalThis.JSZip.loadAsync(await response.arrayBuffer());
+          const blobs = await Promise.all(["indonesian.jpg", "english.jpg"].map(async name => {
+            const bytes = await photos.file(name)?.async("uint8array");
+            return bytes ? new Blob([bytes], { type: "image/jpeg" }) : null;
+          }));
+          if (draftId !== currentDraft) return;
+          for (const [index, code] of sideCodes.entries()) {
+            if (blobs[index] && !sides[code].blob) showPhoto(code, blobs[index], false);
+          }
+          if (card.needsReview) formStatus.textContent = "Check both photos and the deck number, then mark this card reviewed.";
+          scanner.resume();
+        } catch { /* The transcribed fields are still available for review. */ }
+      }
     });
     scanner.resume();
   }
 
-  function showPhoto(code, blob) {
+  function showPhoto(code, blob, newPhoto = true) {
     const side = sides[code];
     if (side.url) URL.revokeObjectURL(side.url);
     side.blob = blob;
+    side.newPhoto = newPhoto;
     side.url = URL.createObjectURL(blob);
     side.photo.src = side.url;
     side.photo.hidden = false;
@@ -287,7 +310,11 @@ export function setupCapture(element, saveCard) {
       fillSuggestion(code, suggested, sides[code].input.value, deck.value);
     },
     pairReady() {
-      if (!editedId && element("auto-save").checked) captureForm.requestSubmit();
+      if (!editedId && element("auto-save").checked) {
+        autoSubmit = true;
+        captureForm.requestSubmit();
+        autoSubmit = false;
+      }
     },
   });
 
@@ -340,9 +367,10 @@ export function setupCapture(element, saveCard) {
         deck: deck.value,
         indonesian: sides.id.input.value,
         english: sides.en.input.value,
+        needsReview: autoSubmit,
       }]);
       let archived = false;
-      if ((await mac).archive && keepPhotos.checked && !archive.hidden) {
+      if ((await mac).archive && keepPhotos.checked && sideCodes.some(code => sides[code].newPhoto)) {
         const response = await fetch(`./api/archive?deck=${card.deck}&id=${encodeURIComponent(card.id)}`, {
           method: "POST", body: await photoBundle(), signal: AbortSignal.timeout(15000),
         });

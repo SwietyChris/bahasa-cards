@@ -115,6 +115,7 @@
         <label class="search-field" for="card-search"><span>Search cards</span>
           <input id="card-search" type="search" placeholder="Indonesian or English">
         </label>
+        <label id="review-field" class="auto-save-label review-field" hidden><input type="checkbox" id="only-review"> <span id="review-label"></span></label>
         <ul id="library-cards" class="library-cards"></ul>
         <button type="button" id="show-more" class="button outline" hidden>Show more cards</button>
       </section>
@@ -183,7 +184,7 @@
                 <option value="en">English side</option>
               </select>
             </div>
-            <label class="auto-save-label"><input type="checkbox" id="auto-save"> Save scanned cards automatically</label>
+            <label class="auto-save-label"><input type="checkbox" id="auto-save"> Save and review later</label>
           </div>
           <p id="camera-status" class="help-text" role="status"></p>
           <p id="scan-status" class="scan-status" role="status"></p>

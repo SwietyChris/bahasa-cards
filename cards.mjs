@@ -41,7 +41,7 @@ export function normalizeCards(input) {
     }
     if (seen.has(id)) throw new Error(`Card ID ${id} appears twice in this file.`);
     seen.add(id);
-    return { id, deck, indonesian, english };
+    return { id, deck, indonesian, english, ...(entry.needsReview === true ? { needsReview: true } : {}) };
   });
 }
 
@@ -99,9 +99,11 @@ export function readPack(text) {
   if (indexes.includes(-1)) {
     throw new Error("Choose a Bahasa Cards JSON pack or a CSV with ID, Deck, Indonesian and English columns.");
   }
-  return normalizeCards(rows.filter(row => row.some(field => field.trim())).map(row =>
-    Object.fromEntries(columns.map((column, index) => [column, row[indexes[index]]]))
-  ));
+  const reviewIndex = headingNames.indexOf("review");
+  return normalizeCards(rows.filter(row => row.some(field => field.trim())).map(row => ({
+    ...Object.fromEntries(columns.map((column, index) => [column, row[indexes[index]]])),
+    needsReview: row[reviewIndex]?.trim().toLowerCase() === "needs review",
+  })));
 }
 
 export function progressKey(direction, card) {
