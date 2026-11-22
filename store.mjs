@@ -11,6 +11,24 @@ function persistBrowser(record) {
   localStorage.setItem(storageKey, JSON.stringify(record));
 }
 
+function hasBrowserCollection(record) {
+  return record.decks !== undefined || record.cards !== undefined;
+}
+
+async function readPublishedCollection() {
+  try {
+    const response = await fetch("./study-pack.json");
+    if (!response.ok) throw new Error(`Study pack request failed (${response.status}).`);
+    const pack = await response.json();
+    if (pack?.version !== packVersion || !Array.isArray(pack.decks) || !Array.isArray(pack.cards)) {
+      throw new Error("Invalid study pack.");
+    }
+    return normalizeCollection(pack);
+  } catch (error) {
+    throw new Error("Studio couldn’t load the published decks. Check your connection and reload.", { cause: error });
+  }
+}
+
 async function macCollection() {
   const response = await fetch("./api/collection", { cache: "no-store" });
   if (!response.ok) throw new Error("Studio could not open your collection file on the Mac.");
@@ -31,6 +49,7 @@ async function writeMac(revision, data) {
 export function createStore(onChange) {
   let data = { decks: [], cards: [] };
   let progress = {};
+  let published;
   let saving = Promise.resolve();
 
   async function load() {
@@ -47,8 +66,12 @@ export function createStore(onChange) {
       }
       try { progress = browserRecord().progress ?? {}; } catch { progress = {}; }
     } else {
-      const record = browserRecord();
-      data = normalizeCollection(record);
+      let record = browserRecord();
+      if (!published && !hasBrowserCollection(record)) {
+        published = await readPublishedCollection();
+        record = browserRecord();
+      }
+      data = hasBrowserCollection(record) ? normalizeCollection(record) : published;
       progress = record.progress ?? {};
     }
     onChange();
@@ -68,8 +91,13 @@ export function createStore(onChange) {
         }
         throw new Error("Another window is editing the collection. Try saving again.");
       }
-      const record = browserRecord();
-      const next = normalizeCollection(update(normalizeCollection(record)));
+      let record = browserRecord();
+      if (!published && !hasBrowserCollection(record)) {
+        published = await readPublishedCollection();
+        record = browserRecord();
+      }
+      const current = hasBrowserCollection(record) ? normalizeCollection(record) : published;
+      const next = normalizeCollection(update(current));
       persistBrowser({ ...record, ...next });
       data = next;
       onChange();

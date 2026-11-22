@@ -4,6 +4,7 @@
   --paper: #fff;
   --ink: #201b37;
   --muted: #554f6b;
+  --danger: #8d273a;
   --violet: #5034a7;
   --violet-dark: #3f268d;
   --soft: #ece7fc;
@@ -81,9 +82,12 @@ button { border: 0; }
 .button.compact { min-height: 2.75rem; }
 .button.primary { background: var(--violet); color: #fff; }
 .button.outline { background: var(--paper); color: var(--violet-dark); border-color: #c8bee7; }
+.button.danger { background: var(--danger); color: #fff; }
+.text-button.danger-text { color: var(--danger); }
 .button:disabled { color: #5f5775; background: #ece8f4; border-color: transparent; }
 @media (hover: hover) {
   .primary:hover:not(:disabled) { background: var(--violet-dark); }
+  .danger:hover:not(:disabled) { background: #731e31; }
   .outline:hover:not(:disabled), .text-button:hover, .nav-button:hover { background: var(--soft); }
 }
 
@@ -234,7 +238,7 @@ progress::-moz-progress-bar { background: var(--violet); border-radius: 1rem; }
 .library-cards { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; gap: .45rem; }
 .library-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(3rem, 7.5rem);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(3rem, 8.5rem);
   gap: .75rem;
   align-items: start;
   background: var(--paper);
@@ -248,7 +252,7 @@ progress::-moz-progress-bar { background: var(--violet); border-radius: 1rem; }
 .library-card p { white-space: pre-wrap; align-self: center; }
 .library-card span { color: var(--muted); font-size: .875rem; }
 .card-end { display: flex; flex-wrap: wrap; align-items: center; justify-content: end; gap: .25rem .45rem; max-width: 18rem; align-self: center; }
-.library-card .edit-card { margin: -.35rem -.45rem -.35rem .25rem; }
+.card-end .text-button { padding-inline: .45rem; }
 .library-card .review-tag { color: #614216; background: #f9edcf; border-radius: .4rem; padding: .16rem .35rem; }
 .review-field { display: inline-flex; align-items: center; gap: .4rem; margin: -.2rem 0 .65rem; }
 .library-actions { display: flex; flex-wrap: wrap; gap: .55rem; align-items: center; }
@@ -333,7 +337,8 @@ dialog::backdrop { background: #1e143a70; }
   padding: .4rem .75rem;
   margin-right: .5rem;
 }
-.dialog-content p.error { color: #8d273a; }
+.dialog-content p.error { color: var(--danger); }
+#delete-card-preview { margin-top: .5rem; color: var(--ink); font-weight: 650; white-space: pre-wrap; overflow-wrap: anywhere; }
 .no-js { margin: 1rem auto; width: fit-content; }
 #print-view { display: none; }
 

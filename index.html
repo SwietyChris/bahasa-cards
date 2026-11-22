@@ -110,7 +110,7 @@
       <section id="library-view" aria-labelledby="library-title" hidden>
         <div class="section-head">
           <div>
-            <h1 id="library-title">Library</h1>
+            <h1 id="library-title" tabindex="-1">Library</h1>
             <p id="library-count" role="status"></p>
           </div>
           <div class="library-actions">
@@ -184,14 +184,17 @@
             <h1 id="capture-title">Add a card</h1>
             <p id="capture-destination"></p>
           </div>
-          <button type="button" id="capture-cancel" class="button outline compact">Back</button>
+          <div class="library-actions">
+            <button type="button" id="capture-cancel" class="button outline compact">Back</button>
+            <button type="button" id="capture-delete" class="text-button danger-text" hidden>Delete card</button>
+          </div>
         </div>
         <div id="scanner" class="capture-camera" hidden>
           <div id="scan-result" class="scan-result" hidden>
             <p id="scan-success" role="status"></p>
             <p id="saved-english"></p>
             <p id="saved-indonesian" lang="id"></p>
-            <button type="button" id="edit-last-card" class="text-button">Edit saved card</button>
+            <button type="button" id="edit-last-card" class="text-button">Edit or delete saved card</button>
           </div>
           <div class="scan-head">
             <p id="scan-step"></p>
@@ -269,6 +272,18 @@
       <input id="deck-name" type="text" maxlength="80" required placeholder="Deck 1">
       <p id="deck-error" class="help-text" role="status"></p>
       <button type="submit" id="deck-save" class="button primary">Create deck</button>
+    </form>
+  </dialog>
+  <dialog id="delete-card-dialog" aria-labelledby="delete-card-title" aria-describedby="delete-card-preview delete-card-effect">
+    <form id="delete-card-form" method="dialog" class="dialog-content">
+      <h2 id="delete-card-title">Delete this card?</h2>
+      <p id="delete-card-preview"></p>
+      <p id="delete-card-effect"></p>
+      <p id="delete-card-error" class="help-text error" role="alert"></p>
+      <div class="library-actions">
+        <button type="button" id="delete-card-cancel" class="button outline" autofocus>Cancel</button>
+        <button type="submit" id="delete-card-confirm" class="button danger">Delete card</button>
+      </div>
     </form>
   </dialog>
   <section id="print-view" aria-label="Printable flashcard collection"></section>

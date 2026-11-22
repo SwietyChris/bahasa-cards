@@ -213,7 +213,7 @@ export function createScanner(element, { save, manual, edit }) {
       element("scan-success").textContent = result.message;
       element("saved-english").textContent = result.card.english;
       element("saved-indonesian").textContent = result.card.indonesian;
-      element("edit-last-card").textContent = result.card.needsReview ? "Review saved card" : "Edit saved card";
+      element("edit-last-card").textContent = result.card.needsReview ? "Review or delete saved card" : "Edit or delete saved card";
       element("scan-result").hidden = false;
       current = newCard(entry.deck, entry.sides.id.key);
       beginReading();
