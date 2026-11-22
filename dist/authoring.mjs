@@ -1,4 +1,4 @@
-import { combineCollections, normalizeCards, normalizeDeck, packVersion, readPack } from "./cards.mjs";
+import { combineCollections, hasNonLatinLetters, normalizeCards, normalizeDeck, packVersion, readPack } from "./cards.mjs";
 import { createScanner, loadCardPhotos, saveCardPhotos } from "./capture.mjs";
 import { saveCollectionPdf, saveDownload } from "./exports.mjs";
 
@@ -202,7 +202,9 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
     element("capture-deck").value = side.deck ?? "";
     element("editor-deck-field").hidden = !!activeDeck && !card;
     element("capture-save").textContent = card?.needsReview ? "Mark reviewed" : card ? "Save changes" : "Save card";
-    element("capture-status").textContent = "";
+    const scriptIssue = hasNonLatinLetters(side.english ?? "") || hasNonLatinLetters(side.indonesian ?? "");
+    element("capture-status").textContent = scriptIssue
+      ? "Check the wording against the saved photo and correct the unexpected letters." : "";
     fillPhotos(fromDraft.photos);
     show("capture");
     element("en-text").focus();
@@ -226,10 +228,11 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
         throw new Error("This deck is unavailable. Choose another deck.");
       }
       const cards = new Map(latest.cards.map(existing => [existing.id, existing]));
-      cards.set(card.id, { ...cards.get(card.id), ...card, needsReview: false });
+      cards.set(card.id, { ...cards.get(card.id), ...card, needsReview: card.needsReview });
       return { ...latest, cards: [...cards.values()] };
     });
-    return { card, message: "Card saved in " + locationOf(card.deck) + "." };
+    const saved = card.needsReview ? "Card saved for review in " : "Card saved in ";
+    return { card, message: saved + locationOf(card.deck) + "." };
   }
 
   const scanner = createScanner(element, { save: saveCard, manual: draft => enterManually({ draft }), edit: editCard });
@@ -317,10 +320,19 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
     button.disabled = true;
     const { card, draft } = editor;
     try {
+      const english = element("en-text").value;
+      const indonesian = element("id-text").value;
+      if (hasNonLatinLetters(english)) {
+        element("en-text").focus();
+        throw new Error("Check the English text and replace letters outside the Latin alphabet.");
+      }
+      if (hasNonLatinLetters(indonesian)) {
+        element("id-text").focus();
+        throw new Error("Check the Bahasa Indonesia text and replace letters outside the Latin alphabet.");
+      }
       const saved = await saveCard({
         id: card?.id ?? draft.id, deck: element("capture-deck").value || null,
-        english: element("en-text").value, indonesian: element("id-text").value,
-        photos: draft.photos,
+        english, indonesian, photos: draft.photos,
       });
       openCollection(activeDeck);
       setMessage(card ? "Card updated." : saved.message);
