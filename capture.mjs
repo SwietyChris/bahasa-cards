@@ -39,7 +39,8 @@ async function recognize(blob, side) {
   const hasNumber = lines.length > 1 && /^#?\s*\d+\.?$/.test(lines[0].text) && lines[1].top - lines[0].top > 0.04;
   if (hasNumber) lines.shift();
   const raw = lines.map(line => line.text).join("\n");
-  const text = /[a-z]/i.test(raw) ? raw.replace(/[АВЕКМНОРСТХаеорсух]/gu, letter => similarLetters[letter]) : raw;
+  const text = raw.replace(/\p{Letter}+/gu, word => /\p{Script=Latin}/u.test(word)
+    ? word.replace(/[АВЕКМНОРСТХаеорсух]/gu, letter => similarLetters[letter]) : word);
   const key = text.normalize("NFC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
   return { text, key, hasNumber };
 }
@@ -212,6 +213,7 @@ export function createScanner(element, { save, manual, edit }) {
       element("scan-success").textContent = result.message;
       element("saved-english").textContent = result.card.english;
       element("saved-indonesian").textContent = result.card.indonesian;
+      element("edit-last-card").textContent = result.card.needsReview ? "Review saved card" : "Edit saved card";
       element("scan-result").hidden = false;
       current = newCard(entry.deck, entry.sides.id.key);
       beginReading();

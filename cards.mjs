@@ -36,6 +36,11 @@ export function normalizeDeck(deck) {
   return { id, name };
 }
 
+export function hasNonLatinLetters(text) {
+  const letters = text.match(/\p{Letter}/gu) ?? [];
+  return letters.some(letter => !/\p{Script_Extensions=Latin}|\p{Script=Common}/u.test(letter));
+}
+
 export function normalizeCards(input) {
   if (!Array.isArray(input) || input.length > maxCards) {
     throw new Error(`A card pack can contain up to ${maxCards.toLocaleString("en")} cards.`);
@@ -55,9 +60,10 @@ export function normalizeCards(input) {
     }
     if (seen.has(id)) throw new Error(`Card ID ${id} appears twice in this file.`);
     seen.add(id);
+    const needsReview = entry.needsReview === true || hasNonLatinLetters(english) || hasNonLatinLetters(indonesian);
     return {
       id, deck, indonesian, english,
-      ...(entry.needsReview === true ? { needsReview: true } : {}),
+      ...(needsReview ? { needsReview: true } : {}),
       ...(typeof entry.batch === "string" && entry.batch ? { batch: entry.batch } : {}),
       ...(Number.isSafeInteger(entry.position) ? { position: entry.position } : {}),
     };
