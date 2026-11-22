@@ -1,5 +1,6 @@
 import { normalizeCards } from "./cards.mjs";
 import { saveDownload } from "./exports.mjs";
+import { setupAutoScan } from "./autoscan.mjs";
 
 const sideCodes = ["id", "en"];
 const cardRatio = 85 / 55;
@@ -62,6 +63,9 @@ export function setupCapture(element, saveCard) {
   const deck = element("capture-deck");
   const archive = element("photo-archive");
   const keepPhotos = element("keep-photos");
+  const autoButton = element("auto-scan");
+  const scanFirst = element("scan-first");
+  const captureForm = element("capture-form");
   const sides = Object.fromEntries(sideCodes.map(code => [code, {
     input: element(`${code}-text`),
     photo: element(`${code}-photo`),
@@ -96,6 +100,7 @@ export function setupCapture(element, saveCard) {
   }
 
   function stopCamera() {
+    scanner.stop();
     cameraTicket += 1;
     stream?.getTracks().forEach(track => track.stop());
     stream = null;
@@ -104,6 +109,8 @@ export function setupCapture(element, saveCard) {
     element("camera-start").hidden = false;
     element("camera-start").disabled = false;
     element("camera-stop").hidden = true;
+    autoButton.hidden = true;
+    element("scan-options").hidden = true;
     element("camera-field").hidden = true;
     cameraStatus.textContent = "";
     cameraButtons(false);
@@ -131,14 +138,15 @@ export function setupCapture(element, saveCard) {
       video.srcObject = opened;
       await video.play();
       if (ticket !== cameraTicket) return;
-      const {width, height} = cardFrame(video.videoWidth, video.videoHeight);
-      frame.style.setProperty("--camera-aspect", video.videoWidth / video.videoHeight);
-      frame.style.setProperty("--guide-width", `${100 * width / video.videoWidth}%`);
-      frame.style.setProperty("--guide-height", `${100 * height / video.videoHeight}%`);
+      updateGuide();
       frame.hidden = false;
       element("camera-start").hidden = true;
       element("camera-stop").hidden = false;
       cameraButtons(true);
+      const features = await mac;
+      if (ticket !== cameraTicket) return;
+      autoButton.hidden = !features.available;
+      element("scan-options").hidden = !features.available;
       cameraStatus.textContent = "Fit the whole card inside the guide. Capture its Indonesian side, then its English side.";
       const track = opened.getVideoTracks()[0];
       track.addEventListener("ended", () => {
@@ -158,6 +166,15 @@ export function setupCapture(element, saveCard) {
         ? "Allow camera access in your browser, or choose photos from your device."
         : "This camera is unavailable. Try the camera again or choose photos.";
     }
+  }
+
+  function updateGuide() {
+    const { videoWidth, videoHeight } = video;
+    if (!videoWidth || !videoHeight) return;
+    const { width, height } = cardFrame(videoWidth, videoHeight);
+    frame.style.setProperty("--camera-aspect", videoWidth / videoHeight);
+    frame.style.setProperty("--guide-width", `${100 * width / videoWidth}%`);
+    frame.style.setProperty("--guide-height", `${100 * height / videoHeight}%`);
   }
 
   function clearPhoto(side) {
@@ -192,9 +209,47 @@ export function setupCapture(element, saveCard) {
           : "Enter the wording from each photo. On iPhone or iPad you can also paste text copied with Live Text.";
       }
     });
+    scanner.resume();
+  }
+
+  function showPhoto(code, blob) {
+    const side = sides[code];
+    if (side.url) URL.revokeObjectURL(side.url);
+    side.blob = blob;
+    side.url = URL.createObjectURL(blob);
+    side.photo.src = side.url;
+    side.photo.hidden = false;
+    archive.hidden = false;
+  }
+
+  function takeFrame() {
+    const { videoWidth, videoHeight } = video;
+    return preparePhoto(video, videoWidth, videoHeight, cardFrame(videoWidth, videoHeight));
+  }
+
+  async function recognizePhoto(blob, code, extractDeck = code === "en") {
+    const response = await fetch(`./api/recognize?side=${code}`, {
+      method: "POST", body: blob, signal: AbortSignal.timeout(35000),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error);
+    return readSuggestion(result.lines, extractDeck ? "en" : "id");
+  }
+
+  function fillSuggestion(code, suggested, originalText, originalDeck) {
+    const side = sides[code];
+    if (side.input.value === originalText && (!originalText || originalText === side.suggestion) && suggested.text) {
+      side.input.value = suggested.text.slice(0, 1200);
+      side.suggestion = side.input.value;
+    }
+    if (code === "en" && deck.value === originalDeck && (!originalDeck || originalDeck === deckSuggestion) && suggested.deck) {
+      deck.value = suggested.deck;
+      deckSuggestion = suggested.deck;
+    }
   }
 
   async function receivePhoto(code, producer) {
+    scanner.stop();
     const side = sides[code];
     const ticket = ++side.ticket;
     const originalText = side.input.value;
@@ -202,45 +257,43 @@ export function setupCapture(element, saveCard) {
     try {
       const blob = await producer();
       if (ticket !== side.ticket) return;
-      if (side.url) URL.revokeObjectURL(side.url);
-      side.blob = blob;
-      side.url = URL.createObjectURL(blob);
-      side.photo.src = side.url;
-      side.photo.hidden = false;
-      archive.hidden = false;
+      showPhoto(code, blob);
       if (!(await mac).available) {
         formStatus.textContent = "Photo ready. Enter or paste the wording and check the deck number.";
         return;
       }
       if (ticket !== side.ticket) return;
       formStatus.textContent = "Reading handwriting on this Mac…";
-      const response = await fetch(`./api/recognize?side=${code}`, {
-        method: "POST", body: blob, signal: AbortSignal.timeout(35000),
-      });
-      const result = await response.json();
+      const suggested = await recognizePhoto(blob, code);
       if (ticket !== side.ticket) return;
-      if (!response.ok) throw new Error(result.error);
-      const suggested = readSuggestion(result.lines, code);
-      if (side.input.value === originalText && (!originalText || originalText === side.suggestion) && suggested.text) {
-        side.input.value = suggested.text.slice(0, 1200);
-        side.suggestion = side.input.value;
-      }
-      if (code === "en" && deck.value === originalDeck && (!originalDeck || originalDeck === deckSuggestion) && suggested.deck) {
-        deck.value = suggested.deck;
-        deckSuggestion = suggested.deck;
-      }
+      fillSuggestion(code, suggested, originalText, originalDeck);
       formStatus.textContent = "Check the photo and fill in any missing fields before saving.";
     } catch (error) {
       if (ticket === side.ticket) formStatus.textContent = error.message || "Enter the text beside the photo.";
     }
   }
 
+  const scanner = setupAutoScan({
+    button: autoButton,
+    status: element("scan-status"),
+    nextSide: () => {
+      const order = scanFirst.value === "en" ? ["en", "id"] : sideCodes;
+      return order.find(code => !sides[code].blob);
+    },
+    sample: takeFrame,
+    recognize: (blob, code) => recognizePhoto(blob, code, true),
+    accept(code, blob, suggested) {
+      showPhoto(code, blob);
+      fillSuggestion(code, suggested, sides[code].input.value, deck.value);
+    },
+    pairReady() {
+      if (!editedId && element("auto-save").checked) captureForm.requestSubmit();
+    },
+  });
+
   for (const code of sideCodes) {
     const side = sides[code];
-    side.shutter.addEventListener("click", () => receivePhoto(code, () => {
-      const {videoWidth, videoHeight} = video;
-      return preparePhoto(video, videoWidth, videoHeight, cardFrame(videoWidth, videoHeight));
-    }));
+    side.shutter.addEventListener("click", () => receivePhoto(code, takeFrame));
     side.file.addEventListener("change", () => {
       const file = side.file.files[0];
       if (!file) return;
@@ -263,7 +316,9 @@ export function setupCapture(element, saveCard) {
 
   element("camera-start").addEventListener("click", () => startCamera());
   element("camera-stop").addEventListener("click", stopCamera);
+  video.addEventListener("resize", updateGuide);
   picker.addEventListener("change", () => startCamera(picker.value));
+  scanFirst.addEventListener("change", () => scanner.resume());
   window.addEventListener("pagehide", stopCamera);
   element("download-photos").addEventListener("click", async () => {
     try {
@@ -273,7 +328,7 @@ export function setupCapture(element, saveCard) {
       formStatus.textContent = "The photo file could not be created. Try saving it again.";
     }
   });
-  element("capture-form").addEventListener("submit", async event => {
+  captureForm.addEventListener("submit", async event => {
     event.preventDefault();
     const button = element("capture-save");
     if (button.disabled) return;
