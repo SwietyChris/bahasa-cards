@@ -8,8 +8,8 @@ import {
   providerLabel,
   saveAiSettings,
   testAiConnection,
-} from "./ai.mjs";
-import { listIndonesianVoices } from "./speech.mjs";
+} from "./ai.mjs?v=12";
+import { listIndonesianVoices } from "./speech.mjs?v=12";
 
 export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowToggle }) {
   const practiceDialog = element("practice-dialog");

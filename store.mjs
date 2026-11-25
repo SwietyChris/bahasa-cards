@@ -1,4 +1,4 @@
-import { normalizeCollection, packVersion, schedule } from "./cards.mjs";
+import { normalizeCollection, packVersion, schedule } from "./cards.mjs?v=12";
 
 export const macStudio = ["127.0.0.1", "localhost"].includes(location.hostname);
 const storageKey = `bahasa-cards:${new URL(".", location.href).pathname}:v1`;

@@ -1,5 +1,5 @@
 const prefix = `bahasa-cards:${new URL(self.registration.scope).pathname}:`;
-const cacheName = prefix + "11";
+const cacheName = prefix + "12";
 const assets = [
   "./", "./index.html", "./style.css", "./app.mjs", "./cards.mjs", "./capture.mjs",
   "./authoring.mjs", "./store.mjs", "./ai.mjs", "./mistral.mjs", "./gemini.mjs",
@@ -24,7 +24,7 @@ self.addEventListener("fetch", event => {
   const address = new URL(event.request.url);
   const key = address.origin + address.pathname;
   if (!allowed.has(key)) return;
-  event.respondWith(fetch(event.request).catch(async () => {
+  event.respondWith(fetch(event.request, { cache: "no-cache" }).catch(async () => {
     const cache = await caches.open(cacheName);
     return await cache.match(key) ?? Response.error();
   }));

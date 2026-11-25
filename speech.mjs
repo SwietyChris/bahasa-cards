@@ -1,4 +1,4 @@
-import { activeAiKey, generateIndonesianSpeech, getAiSettings, providerLabel } from "./ai.mjs";
+import { activeAiKey, generateIndonesianSpeech, getAiSettings, providerLabel } from "./ai.mjs?v=12";
 
 const dbName = "bahasa-tts-cache";
 const storeName = "clips";
