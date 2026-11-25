@@ -1,11 +1,11 @@
 import {
   examples, intervalDays, isDue, localDay, moveCardToReview, newQueue, normalizeCollection,
   progressKey, restoreCardPlacement, returnCardFromReview, reviewDeckId, reviewDeckName, schedule, shuffled,
-} from "./cards.mjs";
-import { createAuthoring } from "./authoring.mjs";
-import { createSpeaker } from "./speech.mjs";
-import { createStore, macStudio } from "./store.mjs";
-import { createTutorUI } from "./tutor.mjs";
+} from "./cards.mjs?v=12";
+import { createAuthoring } from "./authoring.mjs?v=12";
+import { createSpeaker } from "./speech.mjs?v=12";
+import { createStore, macStudio } from "./store.mjs?v=12";
+import { createTutorUI } from "./tutor.mjs?v=12";
 
 const element = id => document.getElementById(id);
 const number = new Intl.NumberFormat("en");
@@ -633,5 +633,5 @@ try {
 }
 element("storage-footer").textContent = store.isMacBackend ? "Your collection is stored on this Mac." : "Your collection and review progress are saved on this device.";
 if ("serviceWorker" in navigator && !macStudio) {
-  navigator.serviceWorker.register("./sw.js").catch(() => {});
+  navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).catch(() => {});
 }

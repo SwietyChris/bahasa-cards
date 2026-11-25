@@ -1,9 +1,9 @@
 import {
   combineCollections, hasNonLatinLetters, normalizeCards, normalizeDeck, packVersion, readPack,
   restoreCardPlacement, returnCardFromReview, reviewDeckId, reviewDeckName,
-} from "./cards.mjs";
-import { createScanner, loadCardPhotos, saveCardPhotos } from "./capture.mjs";
-import { saveCollectionPdf, saveDownload } from "./exports.mjs";
+} from "./cards.mjs?v=12";
+import { createScanner, loadCardPhotos, saveCardPhotos } from "./capture.mjs?v=12";
+import { saveCollectionPdf, saveDownload } from "./exports.mjs?v=12";
 
 export function createAuthoring(element, { store, show, currentView, setMessage, study, count, speaker }) {
   const byName = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
@@ -351,7 +351,7 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
       if (type === "pdf") {
         await saveCollectionPdf(rows, { title: greeting, filename: "bahasa-" + filename + ".pdf" });
       } else {
-        const { makeWorkbook } = await import("./xlsx.mjs");
+        const { makeWorkbook } = await import("./xlsx.mjs?v=12");
         saveDownload(await makeWorkbook(rows), "bahasa-" + filename + ".xlsx");
       }
     } catch {

@@ -37,7 +37,7 @@ function printCollection(cards, title) {
 
 export async function saveCollectionPdf(cards, { title, filename }) {
   try {
-    const { makePdf } = await import("./pdf.mjs");
+    const { makePdf } = await import("./pdf.mjs?v=12");
     saveDownload(await makePdf(cards, title), filename);
   } catch {
     printCollection(cards, title);
