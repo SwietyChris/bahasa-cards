@@ -1,8 +1,11 @@
-import { combineCollections, hasNonLatinLetters, normalizeCards, normalizeDeck, packVersion, readPack } from "./cards.mjs";
+import {
+  combineCollections, hasNonLatinLetters, normalizeCards, normalizeDeck, packVersion, readPack,
+  restoreCardPlacement, returnCardFromReview, reviewDeckId, reviewDeckName,
+} from "./cards.mjs";
 import { createScanner, loadCardPhotos, saveCardPhotos } from "./capture.mjs";
 import { saveCollectionPdf, saveDownload } from "./exports.mjs";
 
-export function createAuthoring(element, { store, show, currentView, setMessage, study, count }) {
+export function createAuthoring(element, { store, show, currentView, setMessage, study, count, speaker }) {
   const byName = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
   const editorForm = element("capture-form");
   const menu = element("deck-dialog");
@@ -20,16 +23,26 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
   const photoUrls = {};
 
   function decks() {
-    return [...store.data.decks].sort((a, b) => byName.compare(a.name, b.name));
+    return [...store.data.decks]
+      .filter(deck => deck.id !== reviewDeckId)
+      .sort((a, b) => byName.compare(a.name, b.name));
   }
 
   function nameOf(id) {
     if (!id) return "Unassigned";
+    if (id === reviewDeckId) return reviewDeckName;
     return store.data.decks.find(deck => deck.id === id)?.name ?? "Deck " + id;
   }
 
   function locationOf(id) {
     return id ? nameOf(id) : "Library";
+  }
+
+  function cardDeckLabel(card) {
+    if (card.deck === reviewDeckId) {
+      return card.originDeck ? `${reviewDeckName} (from ${nameOf(card.originDeck)})` : reviewDeckName;
+    }
+    return nameOf(card.deck);
   }
 
   function renderDecks() {
@@ -38,21 +51,39 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
     for (const card of store.data.cards) {
       totals.set(card.deck, (totals.get(card.deck) ?? 0) + 1);
     }
-    element("deck-summary").textContent = count(deckList.length, "deck") + " · " + count(store.data.cards.length, "card");
-    element("no-decks").hidden = !!deckList.length;
-    const tiles = deckList.map(deck => {
+    const reviewTotal = totals.get(reviewDeckId) ?? 0;
+    const totalDecks = deckList.length + (reviewTotal ? 1 : 0);
+    element("deck-summary").textContent = count(totalDecks, "deck") + " · " + count(store.data.cards.length, "card");
+    element("no-decks").hidden = !!(deckList.length || reviewTotal);
+    const makeTile = ({ id, name, subtitle, isReview = false }) => {
       const item = document.createElement("li");
       const button = document.createElement("button");
-      const name = document.createElement("strong");
+      const heading = document.createElement("strong");
       const total = document.createElement("span");
       button.type = "button";
-      button.dataset.openDeck = deck.id;
-      name.textContent = deck.name;
-      total.textContent = count(totals.get(deck.id) ?? 0, "card");
-      button.replaceChildren(name, total);
+      button.dataset.openDeck = id;
+      if (isReview) button.className = "review-tile";
+      heading.textContent = name;
+      total.textContent = subtitle;
+      button.replaceChildren(heading, total);
       item.append(button);
       return item;
-    });
+    };
+    const tiles = [
+      makeTile({
+        id: reviewDeckId,
+        name: reviewDeckName,
+        subtitle: reviewTotal
+          ? count(reviewTotal, "card") + " · saved for review"
+          : "0 cards · tap Move to Review while studying",
+        isReview: true,
+      }),
+      ...deckList.map(deck => makeTile({
+        id: deck.id,
+        name: deck.name,
+        subtitle: count(totals.get(deck.id) ?? 0, "card"),
+      })),
+    ];
     element("deck-tiles").replaceChildren(...tiles);
   }
 
@@ -108,8 +139,19 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
     if (!activeDeck) {
       const name = document.createElement("span");
       name.className = "card-deck-name";
-      name.textContent = nameOf(card.deck);
+      name.textContent = cardDeckLabel(card);
       actions.append(name);
+    } else if (activeDeck === reviewDeckId) {
+      const origin = document.createElement("span");
+      origin.className = "card-deck-name";
+      origin.textContent = "From " + nameOf(card.originDeck);
+      const putBack = document.createElement("button");
+      putBack.type = "button";
+      putBack.className = "text-button";
+      putBack.dataset.returnCard = card.id;
+      putBack.textContent = "Return";
+      putBack.setAttribute("aria-label", "Return card " + card.english + " to " + nameOf(card.originDeck));
+      actions.append(origin, putBack);
     }
     if (card.needsReview) {
       const badge = document.createElement("span");
@@ -139,7 +181,7 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
     const query = element("card-search").value.trim().toLocaleLowerCase();
     const toReview = cards.filter(card => card.needsReview).length;
     element("library-title").textContent = locationOf(activeDeck);
-    element("rename-deck").hidden = !activeDeck;
+    element("rename-deck").hidden = !activeDeck || activeDeck === reviewDeckId;
     element("study-deck").hidden = !activeDeck;
     element("study-deck").disabled = !cards.some(card => !card.needsReview);
     for (const id of ["export-cards", "import-open", "library-select"]) element(id).hidden = !!activeDeck;
@@ -148,7 +190,7 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
     element("review-label").textContent = "Show scans to review (" + toReview + ")";
     if (!toReview) element("only-review").checked = false;
     results = cards.filter(card => (!element("only-review").checked || card.needsReview) &&
-      (!query || [card.english, card.indonesian, nameOf(card.deck)].some(text => text.toLocaleLowerCase().includes(query))));
+      (!query || [card.english, card.indonesian, cardDeckLabel(card)].some(text => text.toLocaleLowerCase().includes(query))));
     element("library-count").textContent = results.length === cards.length ? count(cards.length, "card")
       : count(results.length, "match") + " in " + count(cards.length, "card");
     if (selection.size) {
@@ -160,7 +202,11 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
     if (!rows.length) {
       const empty = document.createElement("li");
       empty.className = "empty-state";
-      empty.textContent = cards.length ? "No cards match these filters." : "Add a card by typing it or scanning both sides.";
+      empty.textContent = cards.length
+        ? "No cards match these filters."
+        : activeDeck === reviewDeckId
+          ? "No cards in Review right now. While studying any deck, tap Move to Review on cards you want to set aside here."
+          : "Add a card by typing it or scanning both sides.";
       rows.push(empty);
     }
     element("library-cards").replaceChildren(...rows);
@@ -208,10 +254,22 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
     editorForm.hidden = false;
     element("en-text").value = side.english ?? "";
     element("id-text").value = side.indonesian ?? "";
-    element("capture-deck").replaceChildren(new Option("Unassigned", ""),
-      ...decks().map(deck => new Option(deck.name, deck.id)));
+    const deckOptions = [
+      new Option("Unassigned", ""),
+      ...(side.deck === reviewDeckId ? [new Option(reviewDeckName, reviewDeckId)] : []),
+      ...decks().map(deck => new Option(deck.name, deck.id)),
+    ];
+    element("capture-deck").replaceChildren(...deckOptions);
     element("capture-deck").value = side.deck ?? "";
     element("editor-deck-field").hidden = !!activeDeck && !card;
+    const originNotice = element("editor-origin");
+    if (card?.deck === reviewDeckId) {
+      originNotice.textContent = "Currently in Review · original deck: " + nameOf(card.originDeck);
+      originNotice.hidden = false;
+    } else {
+      originNotice.textContent = "";
+      originNotice.hidden = true;
+    }
     element("capture-save").textContent = card?.needsReview ? "Mark reviewed" : card ? "Save changes" : "Save card";
     const scriptIssue = hasNonLatinLetters(side.english ?? "") || hasNonLatinLetters(side.indonesian ?? "");
     element("capture-status").textContent = scriptIssue
@@ -285,7 +343,7 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
   }
 
   async function exportList(type) {
-    const rows = exportCards().map(card => ({ ...card, deckLabel: nameOf(card.deck) }));
+    const rows = exportCards().map(card => ({ ...card, deckLabel: cardDeckLabel(card) }));
     if (!rows.length) return;
     const greeting = activeDeck ? nameOf(activeDeck) : "Library";
     const filename = greeting.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "cards";
@@ -316,6 +374,9 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
     const existingId = editingDeck;
     try {
       const deck = normalizeDeck({ id: existingId ?? "deck-" + crypto.randomUUID(), name: element("deck-name").value });
+      if (byName.compare(deck.name, reviewDeckName) === 0) {
+        throw new Error("“" + reviewDeckName + "” is reserved for your study review deck.");
+      }
       await store.change(latest => {
         if (latest.decks.some(item => item.id !== deck.id && byName.compare(item.name, deck.name) === 0)) {
           throw new Error("A deck with that name already exists.");
@@ -356,8 +417,11 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
         element("id-text").focus();
         throw new Error("Check the Bahasa Indonesia text and replace letters outside the Latin alphabet.");
       }
+      const targetDeck = element("capture-deck").value || null;
+      const keepOrigin = card?.deck === reviewDeckId && targetDeck === reviewDeckId;
       const saved = await saveCard({
-        id: card?.id ?? draft.id, deck: element("capture-deck").value || null,
+        id: card?.id ?? draft.id, deck: targetDeck,
+        ...(keepOrigin ? { originDeck: card.originDeck ?? null } : {}),
         english, indonesian, photos: draft.photos,
       }, { existing: !!card });
       openCollection(activeDeck);
@@ -396,10 +460,39 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
       confirmDelete.disabled = cancelDelete.disabled = false;
     }
   });
+  async function returnCard(id) {
+    const snapshot = store.data.cards.find(item => item.id === id);
+    if (!snapshot || snapshot.deck !== reviewDeckId) return;
+    let outcome;
+    await store.change(latest => {
+      outcome = returnCardFromReview(latest, id);
+      return outcome.collection;
+    }, { preserveRound: true });
+    const destination = nameOf(outcome?.card?.deck);
+    const note = outcome?.lostOrigin
+      ? "Original deck was deleted, so this card moved to Unassigned."
+      : `Returned to ${destination}.`;
+    setMessage(note, {
+      undo: async () => {
+        await store.change(latest => restoreCardPlacement(latest, {
+          id: snapshot.id,
+          deck: snapshot.deck,
+          originDeck: snapshot.originDeck ?? null,
+        }).collection, { preserveRound: true });
+        setMessage("Kept in Review.");
+      },
+    });
+  }
+
+  element("editor-speak").addEventListener("click", () => {
+    speaker?.speak(element("id-text").value);
+  });
+
   element("library-cards").addEventListener("click", event => {
-    const action = event.target.closest("[data-edit], [data-delete-card]")?.dataset;
+    const action = event.target.closest("[data-edit], [data-delete-card], [data-return-card]")?.dataset;
     if (action?.edit) editCard(action.edit);
     if (action?.deleteCard) requestDelete(action.deleteCard);
+    if (action?.returnCard) returnCard(action.returnCard).catch(error => setMessage(error.message));
   });
   element("library-cards").addEventListener("change", event => {
     const id = event.target.dataset.selectCard;

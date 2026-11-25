@@ -50,10 +50,24 @@ export function createStore(onChange) {
   let data = { decks: [], cards: [] };
   let progress = {};
   let published;
+  let useMacBackend = false;
   let saving = Promise.resolve();
 
+  async function detectMacBackend() {
+    if (!macStudio) return false;
+    try {
+      const response = await fetch("./api/recognition", { cache: "no-store" });
+      if (!response.ok) return false;
+      const info = await response.json().catch(() => null);
+      return info?.app === "bahasa-studio";
+    } catch {
+      return false;
+    }
+  }
+
   async function load() {
-    if (macStudio) {
+    useMacBackend = await detectMacBackend();
+    if (useMacBackend) {
       const record = await macCollection();
       if (record.collection) {
         data = normalizeCollection(record.collection);
@@ -77,15 +91,15 @@ export function createStore(onChange) {
     onChange();
   }
 
-  function change(update) {
+  function change(update, options = {}) {
     const operation = saving.then(async () => {
-      if (macStudio) {
+      if (useMacBackend) {
         for (let attempt = 0; attempt < 3; attempt += 1) {
           const latest = await macCollection();
           const next = normalizeCollection(update(normalizeCollection(latest.collection)));
           if (await writeMac(latest.revision, next)) {
             data = next;
-            onChange();
+            onChange(options);
             return;
           }
         }
@@ -100,7 +114,7 @@ export function createStore(onChange) {
       const next = normalizeCollection(update(current));
       persistBrowser({ ...record, ...next });
       data = next;
-      onChange();
+      onChange(options);
     });
     saving = operation.catch(() => {});
     return operation;
@@ -115,7 +129,7 @@ export function createStore(onChange) {
   }
 
   window.addEventListener("storage", event => {
-    if (!macStudio && (event.key === null || event.key === storageKey)) load().catch(() => {});
+    if (!useMacBackend && (event.key === null || event.key === storageKey)) load().catch(() => {});
   });
-  return { load, change, grade, get data() { return data; }, get progress() { return progress; } };
+  return { load, change, grade, get data() { return data; }, get progress() { return progress; }, get isMacBackend() { return useMacBackend; } };
 }

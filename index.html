@@ -28,7 +28,10 @@
         <button type="button" id="study-tab" class="nav-button">Study</button>
         <button type="button" id="quiz-tab" class="nav-button">Quiz</button>
       </nav>
-      <button type="button" id="new-deck" class="button primary compact">New deck</button>
+      <div class="top-actions">
+        <button type="button" id="ai-settings-open" class="button outline compact">AI &amp; Voice</button>
+        <button type="button" id="new-deck" class="button primary compact">New deck</button>
+      </div>
     </div>
   </header>
   <main class="layout manage-layout">
@@ -44,7 +47,10 @@
       </div>
     </aside>
     <div class="content">
-      <p id="message" class="page-message" role="status" hidden></p>
+      <div id="message" class="page-message" role="status" hidden>
+        <span id="message-text"></span>
+        <button type="button" id="message-undo" class="text-button" hidden>Undo</button>
+      </div>
       <p id="storage-message" class="page-message" role="status" hidden></p>
       <section id="decks-view" aria-labelledby="decks-heading">
         <div class="section-head">
@@ -74,8 +80,15 @@
             <div class="field">
               <label for="study-mode">Practice</label>
               <select id="study-mode">
-                <option value="due">Due now</option>
                 <option value="all">All cards</option>
+                <option value="due">Due now</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="study-order">Order</label>
+              <select id="study-order">
+                <option value="ordered">In order</option>
+                <option value="shuffled">Shuffled</option>
               </select>
             </div>
           </div>
@@ -86,11 +99,21 @@
             <button type="button" id="shuffle" class="text-button" hidden>Shuffle cards</button>
           </div>
           <progress id="round-progress" value="0" max="1" aria-label="Cards completed this round"></progress>
-          <button type="button" id="flashcard" class="flashcard">
-            <span id="card-side" class="card-side"></span>
-            <span id="card-text" class="card-text" aria-live="polite"></span>
-            <span id="card-hint" class="card-hint">Tap to reveal</span>
-          </button>
+          <div class="flashcard-stage">
+            <button type="button" id="flashcard" class="flashcard">
+              <span id="card-side" class="card-side"></span>
+              <span id="card-text" class="card-text" aria-live="polite"></span>
+              <span id="card-hint" class="card-hint">Tap to reveal</span>
+            </button>
+            <div class="card-assist" id="card-assist">
+              <div class="speak-group">
+                <button type="button" id="speak-card" class="pill-button">🔊 Listen</button>
+                <button type="button" id="speak-slow" class="pill-button compact-pill" aria-pressed="false" title="Toggle slower pronunciation">0.8×</button>
+              </div>
+              <button type="button" id="practice-card" class="pill-button accent">Practice with AI</button>
+            </div>
+            <p id="speech-status" class="help-text" role="status" hidden></p>
+          </div>
           <div class="grading">
             <button type="button" id="again" class="button outline" disabled>Again</button>
             <button type="button" id="remember" class="button primary" disabled>Got it</button>
@@ -99,7 +122,10 @@
             <span id="again-note">Returns this round</span>
             <span id="remember-note"></span>
           </div>
-          <div class="skip-row"><button type="button" id="skip" class="text-button">Skip for now</button></div>
+          <div class="study-secondary">
+            <button type="button" id="transfer-review" class="button outline compact">Move to Review</button>
+            <button type="button" id="skip" class="text-button">Skip for now</button>
+          </div>
         </div>
         <div id="round-done" class="empty-state" hidden>
           <h2 id="done-title" tabindex="-1"></h2>
@@ -159,6 +185,9 @@
         <div id="quiz-panel" class="empty-state">
           <p id="quiz-position"></p>
           <h2 id="quiz-prompt" tabindex="-1"></h2>
+          <div class="quiz-prompt-tools">
+            <button type="button" id="quiz-speak" class="pill-button" hidden>🔊 Listen</button>
+          </div>
           <form id="quiz-form">
             <label for="quiz-answer">Your answer</label>
             <input id="quiz-answer" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
@@ -169,9 +198,13 @@
           </form>
           <div id="quiz-feedback" hidden>
             <p id="quiz-result" role="status"></p>
-            <p id="quiz-correct-answer"></p>
+            <div class="quiz-answer-row">
+              <p id="quiz-correct-answer"></p>
+              <button type="button" id="quiz-speak-answer" class="pill-button" hidden>🔊 Listen</button>
+            </div>
             <div class="library-actions">
               <button type="button" id="quiz-accept" class="button outline" hidden>Count my answer as correct</button>
+              <button type="button" id="quiz-transfer-review" class="button outline" hidden>Move to Review</button>
               <button type="button" id="quiz-next" class="button primary">Next question</button>
             </div>
           </div>
@@ -234,12 +267,14 @@
               <img id="id-photo" alt="Indonesian side of the card" hidden>
               <label class="visually-hidden" for="id-text">Indonesian text</label>
               <textarea id="id-text" lang="id" maxlength="1200" rows="3" required></textarea>
+              <button type="button" id="editor-speak" class="pill-button">🔊 Listen</button>
             </fieldset>
           </div>
           <div class="field editor-deck" id="editor-deck-field">
             <label for="capture-deck">Assign to deck</label>
             <select id="capture-deck"></select>
           </div>
+          <p id="editor-origin" class="help-text" hidden></p>
           <p id="capture-status" class="help-text" role="status"></p>
           <div class="library-actions">
             <button type="submit" id="capture-save" class="button primary">Save card</button>
@@ -283,6 +318,127 @@
       <div class="library-actions">
         <button type="button" id="delete-card-cancel" class="button outline" autofocus>Cancel</button>
         <button type="submit" id="delete-card-confirm" class="button danger">Delete card</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="practice-dialog" class="wide-dialog" aria-labelledby="practice-title">
+    <div class="dialog-content">
+      <div class="dialog-head">
+        <h2 id="practice-title">Practice with AI</h2>
+        <button type="button" id="practice-close" class="text-button">Close</button>
+      </div>
+      <div class="practice-card-box">
+        <div class="practice-card-words">
+          <strong id="practice-id-word" lang="id"></strong>
+          <span id="practice-en-word"></span>
+        </div>
+        <div class="speak-group">
+          <button type="button" id="practice-speak" class="pill-button">🔊 Listen</button>
+          <button type="button" id="practice-speak-slow" class="pill-button compact-pill" aria-pressed="false" title="Toggle slower pronunciation">0.8×</button>
+        </div>
+      </div>
+      <div id="practice-setup" class="practice-setup" hidden>
+        <p id="practice-setup-copy">Connect your Mistral AI or Google Gemini API key to get sentence feedback, AI pronunciation, and local Bali context.</p>
+        <div class="field">
+          <label for="practice-provider">AI provider</label>
+          <select id="practice-provider"></select>
+        </div>
+        <label class="file-label" id="practice-key-label" for="practice-key-input">Mistral API key</label>
+        <div class="inline-field">
+          <input id="practice-key-input" type="password" autocomplete="off" placeholder="Paste Mistral API key...">
+          <button type="button" id="practice-key-save" class="button primary compact">Save key</button>
+        </div>
+        <div class="library-actions">
+          <a id="practice-key-link" class="button outline compact" href="https://console.mistral.ai/api-keys" target="_blank" rel="noopener">Open Mistral console</a>
+          <button type="button" id="practice-open-ai" class="text-button">AI &amp; Voice settings</button>
+        </div>
+        <p id="practice-setup-status" class="help-text" role="status"></p>
+      </div>
+      <div id="practice-workspace" hidden>
+        <div class="practice-starters">
+          <button type="button" id="practice-ask-bali" class="pill-button">How locals say it in Bali</button>
+          <button type="button" id="practice-ask-examples" class="pill-button">3 everyday examples</button>
+          <button type="button" id="practice-reset" class="text-button" hidden>New topic</button>
+        </div>
+        <div id="practice-thread" class="practice-thread" aria-live="polite"></div>
+        <form id="practice-form" class="practice-form">
+          <label class="file-label" for="practice-input">Write a Bahasa Indonesia sentence or ask a question</label>
+          <textarea id="practice-input" rows="2" maxlength="1000" placeholder="Try writing a sentence using this word, or ask how locals say it in Bali…"></textarea>
+          <div class="library-actions">
+            <button type="submit" id="practice-send" class="button primary compact">Check with AI</button>
+            <span id="practice-status" class="help-text" role="status"></span>
+          </div>
+        </form>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="ai-dialog" class="wide-dialog" aria-labelledby="ai-title">
+    <form id="ai-form" class="dialog-content">
+      <div class="dialog-head">
+        <h2 id="ai-title">AI &amp; Voice Settings</h2>
+        <button type="button" id="ai-close" class="text-button">Close</button>
+      </div>
+      <p class="ai-note">Pronunciation works right away using your device’s voice. Add a Mistral AI or Google Gemini API key for natural AI voices and Bali sentence coaching — saved only on this device.</p>
+      <fieldset class="ai-group">
+        <legend>AI Provider &amp; API Key</legend>
+        <div class="field">
+          <label for="ai-provider">AI provider</label>
+          <select id="ai-provider"></select>
+        </div>
+        <p id="ai-key-help" class="help-text"></p>
+        <label class="file-label" id="ai-api-key-label" for="ai-api-key">Mistral API key</label>
+        <div class="inline-field">
+          <input id="ai-api-key" type="password" autocomplete="off" placeholder="Paste API key...">
+          <button type="button" id="ai-toggle-key" class="button outline compact">Show</button>
+        </div>
+        <div class="library-actions">
+          <a id="ai-get-key" class="button outline compact" href="https://console.mistral.ai/api-keys" target="_blank" rel="noopener">Open Mistral console</a>
+          <button type="button" id="ai-test-key" class="button outline compact">Test connection</button>
+          <button type="button" id="ai-clear-key" class="text-button danger-text">Clear key</button>
+        </div>
+      </fieldset>
+      <fieldset class="ai-group">
+        <legend>Indonesian Pronunciation &amp; Coach</legend>
+        <div class="ai-grid">
+          <div class="field">
+            <label for="ai-voice-mode">Voice source</label>
+            <select id="ai-voice-mode">
+              <option value="auto">Auto (AI voice if connected, else device)</option>
+              <option value="browser">Device voice only (offline)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ai-speech-speed">Default pace</label>
+            <select id="ai-speech-speed">
+              <option value="normal">Normal</option>
+              <option value="slow">Slow (learner pace)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ai-tts-voice">AI voice</label>
+            <select id="ai-tts-voice"></select>
+          </div>
+          <div class="field">
+            <label for="ai-tts-model">Voice model</label>
+            <select id="ai-tts-model"></select>
+          </div>
+          <div class="field">
+            <label for="ai-text-model">Coach model</label>
+            <select id="ai-text-model"></select>
+          </div>
+          <div class="field">
+            <label for="ai-local-focus">Local context</label>
+            <input id="ai-local-focus" type="text" maxlength="80" placeholder="Bali, Indonesia">
+          </div>
+        </div>
+        <div class="library-actions">
+          <button type="button" id="ai-test-voice" class="button outline compact">🔊 Test pronunciation</button>
+          <span id="ai-device-voice-info" class="help-text"></span>
+        </div>
+      </fieldset>
+      <p id="ai-status" class="help-text" role="status"></p>
+      <div class="library-actions">
+        <button type="submit" id="ai-save" class="button primary">Save settings</button>
       </div>
     </form>
   </dialog>
