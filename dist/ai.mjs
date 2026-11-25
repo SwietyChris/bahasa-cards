@@ -6,7 +6,7 @@ import {
   testGeminiConnection,
   textModels as geminiTextModels,
   ttsModels as geminiTtsModels,
-} from "./gemini.mjs?v=12";
+} from "./gemini.mjs?v=13";
 import {
   clearMistralCaches,
   coachWithMistral,
@@ -16,7 +16,7 @@ import {
   mistralTextModels,
   mistralTtsModels,
   testMistralConnection,
-} from "./mistral.mjs?v=12";
+} from "./mistral.mjs?v=13";
 
 const storageKey = "bahasa-cards:ai:v1";
 const legacyGeminiKey = "bahasa-cards:gemini:v1";

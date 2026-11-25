@@ -1,4 +1,4 @@
-import { macStudio } from "./store.mjs?v=12";
+import { macStudio } from "./store.mjs?v=13";
 
 const sideNames = { en: "English", id: "Bahasa Indonesia" };
 const cardRatio = 85 / 55;

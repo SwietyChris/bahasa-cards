@@ -8,8 +8,8 @@ import {
   providerLabel,
   saveAiSettings,
   testAiConnection,
-} from "./ai.mjs?v=12";
-import { listIndonesianVoices } from "./speech.mjs?v=12";
+} from "./ai.mjs?v=13";
+import { listIndonesianVoices } from "./speech.mjs?v=13";
 
 export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowToggle }) {
   const practiceDialog = element("practice-dialog");
@@ -51,14 +51,35 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     } catch { /* Ignore background voice refresh failures. */ }
   }
 
+  function syncKeyToggle() {
+    const input = element("ai-api-key");
+    const toggle = element("ai-toggle-key");
+    const hasDraft = Boolean(input.value);
+    toggle.hidden = !hasDraft;
+    if (!hasDraft) {
+      input.type = "password";
+      toggle.textContent = "Show";
+    }
+  }
+
+  function syncSavedKeyHint(provider, settings = getAiSettings()) {
+    const meta = getProviderMeta(provider);
+    const hasSaved = Boolean(settings[meta.keyField]);
+    element("ai-key-saved").hidden = !hasSaved;
+    element("ai-api-key").placeholder = hasSaved
+      ? "•••••••••••••••• (saved on this device — paste new key to replace)"
+      : meta.keyPlaceholder;
+    syncKeyToggle();
+  }
+
   function applyProviderToAiForm(provider, settings = getAiSettings()) {
     activeModalProvider = provider;
     const meta = getProviderMeta(provider);
     element("ai-provider").value = provider;
     element("ai-key-help").textContent = meta.keyHelp;
     element("ai-api-key-label").textContent = meta.keyLabel;
-    element("ai-api-key").placeholder = meta.keyPlaceholder;
-    element("ai-api-key").value = draftKeys[provider] ?? settings[meta.keyField] ?? "";
+    element("ai-api-key").value = draftKeys[provider] ?? "";
+    syncSavedKeyHint(provider, settings);
     const getLink = element("ai-get-key");
     getLink.href = meta.keyUrl;
     getLink.textContent = meta.keyLinkLabel;
@@ -67,17 +88,15 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     populateSelect(element("ai-tts-model"), meta.ttsModels, settings[meta.ttsModelField]);
     populateSelect(element("ai-text-model"), meta.textModels, settings[meta.textModelField]);
 
-    if (provider === "mistral" && element("ai-api-key").value.trim()) {
-      refreshMistralVoices(element("ai-api-key").value.trim(), settings[meta.ttsVoiceField]);
+    const effectiveMistralKey = draftKeys.mistral?.trim() || settings.mistralApiKey;
+    if (provider === "mistral" && effectiveMistralKey) {
+      refreshMistralVoices(effectiveMistralKey, settings[meta.ttsVoiceField]);
     }
   }
 
   function syncAiDialogFromStorage() {
     const settings = getAiSettings();
-    draftKeys = {
-      gemini: settings.geminiApiKey || "",
-      mistral: settings.mistralApiKey || "",
-    };
+    draftKeys = { gemini: "", mistral: "" };
     populateSelect(element("ai-provider"), aiProviders, settings.provider);
     element("ai-voice-mode").value = settings.voiceMode;
     element("ai-speech-speed").value = settings.speechSpeed;
@@ -328,18 +347,28 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     aiDialog.showModal();
   }
 
+  function maskSavedInputs(provider, saved) {
+    draftKeys[provider] = "";
+    element("ai-api-key").value = "";
+    syncSavedKeyHint(provider, saved);
+  }
+
   function readAiFormValues() {
+    const current = getAiSettings();
     const provider = element("ai-provider").value === "gemini" ? "gemini" : "mistral";
     const meta = getProviderMeta(provider);
     draftKeys[provider] = element("ai-api-key").value;
+    const typedGemini = draftKeys.gemini.trim();
+    const typedMistral = draftKeys.mistral.trim();
+    const typedCurrent = element("ai-api-key").value.trim();
     return {
       provider,
       voiceMode: element("ai-voice-mode").value,
       speechSpeed: element("ai-speech-speed").value,
       localFocus: element("ai-local-focus").value,
-      geminiApiKey: draftKeys.gemini,
-      mistralApiKey: draftKeys.mistral,
-      [meta.keyField]: element("ai-api-key").value,
+      geminiApiKey: typedGemini || current.geminiApiKey,
+      mistralApiKey: typedMistral || current.mistralApiKey,
+      [meta.keyField]: typedCurrent || current[meta.keyField],
       [meta.ttsVoiceField]: element("ai-tts-voice").value,
       [meta.ttsModelField]: element("ai-tts-model").value,
       [meta.textModelField]: element("ai-text-model").value,
@@ -425,18 +454,21 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     element("ai-status").textContent = "";
     applyProviderToAiForm(nextProvider);
   });
+  element("ai-api-key").addEventListener("input", syncKeyToggle);
   element("ai-toggle-key").addEventListener("click", () => {
     const input = element("ai-api-key");
+    if (!input.value) return;
     const reveal = input.type === "password";
     input.type = reveal ? "text" : "password";
     element("ai-toggle-key").textContent = reveal ? "Hide" : "Show";
   });
   element("ai-test-voice").addEventListener("click", () => {
     const values = readAiFormValues();
-    saveAiSettings(values);
+    const saved = saveAiSettings(values);
+    maskSavedInputs(values.provider, saved);
     syncProviderLabels();
-    if (values.provider === "mistral" && element("ai-api-key").value.trim()) {
-      refreshMistralVoices(element("ai-api-key").value.trim(), element("ai-tts-voice").value);
+    if (values.provider === "mistral" && saved.mistralApiKey) {
+      refreshMistralVoices(saved.mistralApiKey, saved.mistralTtsVoice);
     }
     speakText("Selamat pagi, apa kabar?", element("ai-test-voice"), element("ai-status"));
   });
@@ -444,10 +476,11 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     const status = element("ai-status");
     const button = element("ai-test-key");
     const values = readAiFormValues();
-    saveAiSettings(values);
+    const saved = saveAiSettings(values);
+    maskSavedInputs(values.provider, saved);
     syncProviderLabels();
     const meta = getProviderMeta(values.provider);
-    const key = element("ai-api-key").value.trim();
+    const key = saved[meta.keyField];
     if (!key) {
       status.classList.add("error");
       status.textContent = `Enter a ${meta.keyLabel} first to test the connection.`;
@@ -460,7 +493,7 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     try {
       const info = await testAiConnection(values.provider, key);
       if (values.provider === "mistral") {
-        await refreshMistralVoices(key, values.mistralTtsVoice);
+        await refreshMistralVoices(key, saved.mistralTtsVoice);
       }
       status.classList.add("ok");
       status.textContent = `Connected to ${meta.name} using ${info.model} (${info.seconds}s)! Voice and Bali Practice Coach are ready.`;
@@ -476,7 +509,8 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     const meta = getProviderMeta(provider);
     element("ai-api-key").value = "";
     draftKeys[provider] = "";
-    saveAiSettings({ provider, [meta.keyField]: "" });
+    const saved = saveAiSettings({ provider, [meta.keyField]: "" });
+    maskSavedInputs(provider, saved);
     syncProviderLabels();
     element("ai-status").classList.remove("error", "ok");
     element("ai-status").textContent = `${meta.name} API key removed from this browser. Device voice remains available.`;
@@ -484,7 +518,9 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
   });
   element("ai-form").addEventListener("submit", event => {
     event.preventDefault();
-    saveAiSettings(readAiFormValues());
+    const values = readAiFormValues();
+    const saved = saveAiSettings(values);
+    maskSavedInputs(values.provider, saved);
     syncProviderLabels();
     aiDialog.close();
     if (practiceDialog.open) syncPracticeMode();

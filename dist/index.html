@@ -10,10 +10,10 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="icon" type="image/png" href="./icon-192.png">
-  <link rel="stylesheet" href="./style.css?v=12">
+  <link rel="stylesheet" href="./style.css?v=13">
   <script defer src="./vendor/jszip.min.js"></script>
   <script defer src="./vendor/pdf-lib.min.js"></script>
-  <script type="module" src="./app.mjs?v=12"></script>
+  <script type="module" src="./app.mjs?v=13"></script>
 </head>
 <body>
   <header class="top">
@@ -387,9 +387,10 @@
         </div>
         <p id="ai-key-help" class="help-text"></p>
         <label class="file-label" id="ai-api-key-label" for="ai-api-key">Mistral API key</label>
+        <p id="ai-key-saved" class="help-text ok" hidden>Saved on this device (hidden — leave blank to keep).</p>
         <div class="inline-field">
           <input id="ai-api-key" type="password" autocomplete="off" placeholder="Paste API key...">
-          <button type="button" id="ai-toggle-key" class="button outline compact">Show</button>
+          <button type="button" id="ai-toggle-key" class="button outline compact" hidden>Show</button>
         </div>
         <div class="library-actions">
           <a id="ai-get-key" class="button outline compact" href="https://console.mistral.ai/api-keys" target="_blank" rel="noopener">Open Mistral console</a>
