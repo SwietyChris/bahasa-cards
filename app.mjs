@@ -1,11 +1,11 @@
 import {
   examples, intervalDays, isDue, localDay, moveCardToReview, newQueue, normalizeCollection,
   progressKey, restoreCardPlacement, returnCardFromReview, reviewDeckId, reviewDeckName, schedule, shuffled,
-} from "./cards.mjs?v=12";
-import { createAuthoring } from "./authoring.mjs?v=12";
-import { createSpeaker } from "./speech.mjs?v=12";
-import { createStore, macStudio } from "./store.mjs?v=12";
-import { createTutorUI } from "./tutor.mjs?v=12";
+} from "./cards.mjs?v=13";
+import { createAuthoring } from "./authoring.mjs?v=13";
+import { createSpeaker } from "./speech.mjs?v=13";
+import { createStore, macStudio } from "./store.mjs?v=13";
+import { createTutorUI } from "./tutor.mjs?v=13";
 
 const element = id => document.getElementById(id);
 const number = new Intl.NumberFormat("en");
