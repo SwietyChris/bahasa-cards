@@ -45,7 +45,18 @@ def recognition_binary():
             yield binary
 
 
+class LocalServer(ThreadingHTTPServer):
+    allow_reuse_address = platform.system() != "Windows"
+
+
 class LocalApp(SimpleHTTPRequestHandler):
+    extensions_map = {
+        **SimpleHTTPRequestHandler.extensions_map,
+        ".mjs": "text/javascript; charset=utf-8",
+        ".js": "text/javascript; charset=utf-8",
+        ".webmanifest": "application/manifest+json; charset=utf-8",
+    }
+
     def end_headers(self):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Permissions-Policy", "camera=(self), microphone=()")
@@ -69,6 +80,12 @@ class LocalApp(SimpleHTTPRequestHandler):
     def do_GET(self):
         request = urlsplit(self.path)
         if request.path in {"/api/recognition", "/api/archive", "/api/collection"}:
+            if getattr(self.server, "public_mode", False):
+                if request.path == "/api/recognition":
+                    self.json_response(200, {"app": "bahasa-studio-preview", "available": False, "archive": False})
+                else:
+                    self.json_response(404, {"error": "Static preview mode."})
+                return
             if not self.is_local_request():
                 self.json_response(403, {"error": "Open Bahasa Studio on this Mac."})
                 return
@@ -246,13 +263,14 @@ def main():
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--open", action="store_true", help="Open the app when it is ready.")
     parser.add_argument("--no-ocr", action="store_true", help="Serve the app without Apple Vision.")
+    parser.add_argument("--public", action="store_true", help="Preview in static GitHub Pages mode using dist/study-pack.json and browser storage.")
     parser.add_argument("--photo-folder", type=Path, default=DEFAULT_PHOTO_FOLDER, help="Folder for saved photo files.")
     parser.add_argument("--collection", type=Path, default=DEFAULT_COLLECTION, help="Private collection file.")
     args = parser.parse_args()
     handler = partial(LocalApp, directory=ROOT / "dist")
-    compiled_reader = recognition_binary() if not args.no_ocr and platform.system() == "Darwin" else iter([None])
+    compiled_reader = recognition_binary() if not args.public and not args.no_ocr and platform.system() == "Darwin" else iter([None])
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", args.port), handler)
+        server = LocalServer(("127.0.0.1", args.port), handler)
     except OSError as error:
         if error.errno != errno.EADDRINUSE or not args.open or platform.system() != "Darwin":
             raise
@@ -263,8 +281,9 @@ def main():
         subprocess.run(["open", url], check=False)
         return
     with server:
-        if not args.no_ocr and platform.system() == "Darwin":
+        if not args.public and not args.no_ocr and platform.system() == "Darwin":
             print("Preparing handwriting recognition on this Mac…", flush=True)
+        server.public_mode = args.public
         server.reader = next(compiled_reader)
         server.photo_folder = args.photo_folder
         server.collection_file = args.collection

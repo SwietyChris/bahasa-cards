@@ -1,6 +1,8 @@
 export const packVersion = 2;
 export const maxCards = 10000;
 export const intervalDays = [1, 3, 7, 14, 30, 60, 90];
+export const reviewDeckId = "review";
+export const reviewDeckName = "Review";
 
 export const examples = [
   { id: "demo-01", deck: 1, indonesian: "selamat pagi", english: "good morning" },
@@ -31,7 +33,9 @@ function deckId(value) {
 
 export function normalizeDeck(deck) {
   const id = deckId(deck?.id);
-  const name = typeof deck?.name === "string" ? deck.name.trim().replace(/\s+/g, " ") : "";
+  const name = id === reviewDeckId
+    ? reviewDeckName
+    : typeof deck?.name === "string" ? deck.name.trim().replace(/\s+/g, " ") : "";
   if (!id || !name || name.length > 80) throw new Error("Enter a deck name of 1–80 characters.");
   return { id, name };
 }
@@ -61,8 +65,13 @@ export function normalizeCards(input) {
     if (seen.has(id)) throw new Error(`Card ID ${id} appears twice in this file.`);
     seen.add(id);
     const needsReview = entry.needsReview === true || hasNonLatinLetters(english) || hasNonLatinLetters(indonesian);
+    const hasOrigin = deck === reviewDeckId && "originDeck" in entry && entry.originDeck !== undefined;
+    const originDeck = hasOrigin
+      ? (entry.originDeck === null || entry.originDeck === "" ? null : deckId(entry.originDeck))
+      : undefined;
     return {
       id, deck, indonesian, english,
+      ...(hasOrigin ? { originDeck } : {}),
       ...(needsReview ? { needsReview: true } : {}),
       ...(typeof entry.batch === "string" && entry.batch ? { batch: entry.batch } : {}),
       ...(Number.isSafeInteger(entry.position) ? { position: entry.position } : {}),
@@ -81,7 +90,9 @@ export function normalizeCollection(record) {
     decks.set(deck.id, deck);
   }
   for (const {deck} of cards) {
-    if (deck && !decks.has(deck)) decks.set(deck, { id: deck, name: `Deck ${deck}` });
+    if (deck && !decks.has(deck)) {
+      decks.set(deck, { id: deck, name: deck === reviewDeckId ? reviewDeckName : `Deck ${deck}` });
+    }
   }
   return { decks: [...decks.values()], cards };
 }
@@ -90,6 +101,11 @@ export function combineCollections(current, incoming, legacy = false) {
   const decks = new Map(current.decks.map(deck => [deck.id, deck]));
   const deckIds = new Map();
   for (const deck of incoming.decks) {
+    if (deck.id === reviewDeckId || deck.name.toLowerCase() === reviewDeckName.toLowerCase()) {
+      decks.set(reviewDeckId, { id: reviewDeckId, name: reviewDeckName });
+      deckIds.set(deck.id, reviewDeckId);
+      continue;
+    }
     const sameId = decks.get(deck.id);
     const sameName = [...decks.values()].find(item => item.name.toLowerCase() === deck.name.toLowerCase());
     if (sameId) {
@@ -105,7 +121,24 @@ export function combineCollections(current, incoming, legacy = false) {
   const cards = new Map(current.cards.map(card => [card.id, card]));
   for (const card of incoming.cards) {
     const previous = cards.get(card.id);
-    cards.set(card.id, { ...previous, ...card, deck: deckIds.get(card.deck) ?? null, needsReview: card.needsReview });
+    const incomingDeck = deckIds.get(card.deck) ?? null;
+    if (previous?.deck === reviewDeckId && incomingDeck !== reviewDeckId) {
+      cards.set(card.id, {
+        ...previous,
+        ...card,
+        deck: reviewDeckId,
+        originDeck: incomingDeck,
+        needsReview: card.needsReview,
+      });
+    } else {
+      const next = { ...previous, ...card, deck: incomingDeck, needsReview: card.needsReview };
+      if (incomingDeck === reviewDeckId && "originDeck" in card) {
+        next.originDeck = card.originDeck === null ? null : (deckIds.get(card.originDeck) ?? card.originDeck);
+      } else {
+        delete next.originDeck;
+      }
+      cards.set(card.id, next);
+    }
   }
   return normalizeCollection({ decks: [...decks.values()], cards: [...cards.values()] });
 }
@@ -208,7 +241,7 @@ export function newQueue(cards, progress, direction, mode, day) {
     const firstReview = progress[progressKey(direction, first)]?.due ?? Infinity;
     const secondReview = progress[progressKey(direction, second)]?.due ?? Infinity;
     return firstReview - secondReview || sortCards(first, second);
-  }).slice(0, 20);
+  });
 }
 
 export function shuffled(cards) {
@@ -218,4 +251,56 @@ export function shuffled(cards) {
     [copy[index], copy[earlier]] = [copy[earlier], copy[index]];
   }
   return copy;
+}
+
+export function moveCardToReview(collection, cardId) {
+  const decks = new Map(collection.decks.map(deck => [deck.id, deck]));
+  decks.set(reviewDeckId, { id: reviewDeckId, name: reviewDeckName });
+  let moved = null;
+  const cards = collection.cards.map(card => {
+    if (card.id !== cardId || card.deck === reviewDeckId) return card;
+    moved = {
+      ...card,
+      originDeck: card.deck ?? null,
+      deck: reviewDeckId,
+    };
+    return moved;
+  });
+  return { collection: { decks: [...decks.values()], cards }, card: moved };
+}
+
+export function returnCardFromReview(collection, cardId) {
+  const deckIds = new Set(collection.decks.map(deck => deck.id));
+  let returned = null;
+  let lostOrigin = false;
+  const cards = collection.cards.map(card => {
+    if (card.id !== cardId || card.deck !== reviewDeckId) return card;
+    const target = card.originDeck && deckIds.has(card.originDeck) ? card.originDeck : null;
+    if (card.originDeck && !target) lostOrigin = true;
+    const { originDeck: _ignored, ...rest } = card;
+    returned = { ...rest, deck: target };
+    return returned;
+  });
+  return { collection: { ...collection, cards }, card: returned, lostOrigin };
+}
+
+export function restoreCardPlacement(collection, snapshot) {
+  const decks = new Map(collection.decks.map(deck => [deck.id, deck]));
+  if (snapshot.deck === reviewDeckId) {
+    decks.set(reviewDeckId, { id: reviewDeckId, name: reviewDeckName });
+  }
+  const deckIds = new Set(decks.keys());
+  const targetDeck = snapshot.deck && deckIds.has(snapshot.deck) ? snapshot.deck : null;
+  let restored = null;
+  const cards = collection.cards.map(card => {
+    if (card.id !== snapshot.id) return card;
+    const { originDeck: _ignored, ...rest } = card;
+    restored = {
+      ...rest,
+      deck: targetDeck,
+      ...(targetDeck === reviewDeckId && "originDeck" in snapshot ? { originDeck: snapshot.originDeck ?? null } : {}),
+    };
+    return restored;
+  });
+  return { collection: { decks: [...decks.values()], cards }, card: restored };
 }
