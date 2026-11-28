@@ -3,10 +3,10 @@ import {
   progressKey, restoreCardPlacement, returnCardFromReview, reviewDeckId, reviewDeckName, schedule, shuffled,
 } from "./cards.mjs?v=13";
 import { createAuthoring } from "./authoring.mjs?v=14";
-import { createSpeaker } from "./speech.mjs?v=18";
+import { createSpeaker } from "./speech.mjs?v=20";
 import { createStore, macStudio } from "./store.mjs?v=16";
 import { connection } from "./sync.mjs?v=15";
-import { createTutorUI } from "./tutor.mjs?v=19";
+import { createTutorUI } from "./tutor.mjs?v=20";
 
 const element = id => document.getElementById(id);
 const number = new Intl.NumberFormat("en");
@@ -27,6 +27,7 @@ function loadPrefs() {
       mode: saved?.mode === "due" ? "due" : "all",
       order: saved?.order === "shuffled" ? "shuffled" : "ordered",
       slowSpeech: Boolean(saved?.slowSpeech),
+      slowerSpeech: Boolean(saved?.slowerSpeech),
     };
   } catch {
     return { direction: "id", mode: "all", order: "ordered", slowSpeech: false };
@@ -35,7 +36,7 @@ function loadPrefs() {
 
 function savePrefs() {
   try {
-    localStorage.setItem(prefsKey, JSON.stringify({ direction, mode, order, slowSpeech }));
+    localStorage.setItem(prefsKey, JSON.stringify({ direction, mode, order, slowSpeech, slowerSpeech }));
   } catch {}
 }
 
@@ -45,6 +46,7 @@ let direction = initialPrefs.direction;
 let mode = initialPrefs.mode;
 let order = initialPrefs.order;
 let slowSpeech = initialPrefs.slowSpeech;
+let slowerSpeech = initialPrefs.slowerSpeech;
 let view = "decks";
 let queue = [];
 let roundEntries = [];
@@ -77,7 +79,7 @@ function stopSpeech() {
   resetSpeakButton();
 }
 
-function speakText(text, button, statusElement = element("speech-status"), { slow = slowSpeech, speed } = {}) {
+function speakText(text, button, statusElement = element("speech-status"), { slow = slowSpeech || slowerSpeech, speed = slowerSpeech ? 0.7 : slowSpeech ? 0.8 : undefined, requireAi = false } = {}) {
   if (!text) return;
   resetSpeakButton();
   if (statusElement) {
@@ -92,6 +94,7 @@ function speakText(text, button, statusElement = element("speech-status"), { slo
   speaker.speak(text, {
     slow,
     speed,
+    requireAi,
     onState(state, detail) {
       if (state === "loading") {
         button.textContent = "Loading…";
@@ -133,13 +136,15 @@ function speakText(text, button, statusElement = element("speech-status"), { slo
 
 function syncSlowUI() {
   element("speak-slow").setAttribute("aria-pressed", String(slowSpeech));
-  tutor.syncSlowButtons(slowSpeech);
+  element("speak-slower").setAttribute("aria-pressed", String(slowerSpeech));
+  tutor.syncSlowButtons(slowSpeech, slowerSpeech);
 }
 
 const tutor = createTutorUI(element, {
   speakText,
   stopSpeech,
   getSlow: () => slowSpeech,
+  getSlower: () => slowerSpeech,
   cardNavigation: () => ({ previous: cardIndex > 0, next: cardIndex < roundEntries.length - 1 }),
   navigateCard(offset) {
     showCard(cardIndex + offset);
@@ -147,6 +152,13 @@ const tutor = createTutorUI(element, {
   },
   onSlowToggle() {
     slowSpeech = !slowSpeech;
+    slowerSpeech = false;
+    savePrefs();
+    syncSlowUI();
+  },
+  onSlowerToggle() {
+    slowerSpeech = !slowerSpeech;
+    slowSpeech = false;
     savePrefs();
     syncSlowUI();
   },
@@ -612,16 +624,17 @@ element("flashcard").addEventListener("click", () => {
 });
 element("speak-card").addEventListener("click", () => {
   const card = currentEntry()?.card;
-  if (card && (direction === "id" || revealed)) speakText(card.indonesian, element("speak-card"));
+  if (card && (direction === "id" || revealed)) speakText(card.indonesian, element("speak-card"), element("speech-status"), { requireAi: true });
 });
 element("speak-slower").addEventListener("click", () => {
-  const card = currentEntry()?.card;
-  if (card && (direction === "id" || revealed)) {
-    speakText(card.indonesian, element("speak-slower"), element("speech-status"), { slow: true, speed: 0.5 });
-  }
+  slowerSpeech = !slowerSpeech;
+  slowSpeech = false;
+  savePrefs();
+  syncSlowUI();
 });
 element("speak-slow").addEventListener("click", () => {
   slowSpeech = !slowSpeech;
+  slowerSpeech = false;
   savePrefs();
   syncSlowUI();
 });
