@@ -3,9 +3,10 @@ import {
   progressKey, restoreCardPlacement, returnCardFromReview, reviewDeckId, reviewDeckName, schedule, shuffled,
 } from "./cards.mjs?v=13";
 import { createAuthoring } from "./authoring.mjs?v=14";
-import { createSpeaker } from "./speech.mjs?v=13";
-import { createStore, macStudio } from "./store.mjs?v=13";
-import { createTutorUI } from "./tutor.mjs?v=14";
+import { createSpeaker } from "./speech.mjs?v=15";
+import { createStore, macStudio } from "./store.mjs?v=15";
+import { connection } from "./sync.mjs?v=15";
+import { createTutorUI } from "./tutor.mjs?v=15";
 
 const element = id => document.getElementById(id);
 const number = new Intl.NumberFormat("en");
@@ -150,7 +151,14 @@ const tutor = createTutorUI(element, {
   },
 });
 
-const store = createStore(refreshCollection);
+function updateSyncStatus(message) {
+  element("sync-status").textContent = message;
+  element("storage-footer").textContent = message === "Synced across devices"
+    ? "Collection and review progress are synced across connected devices."
+    : message;
+}
+
+const store = createStore(refreshCollection, updateSyncStatus);
 const authoring = createAuthoring(element, {
   store, show: switchView, currentView: () => view, setMessage, count, speaker,
   study(deck) {
@@ -623,6 +631,36 @@ element("message-undo").addEventListener("click", async () => {
   element("message-undo").disabled = true;
   await action().catch(error => setMessage(error.message));
 });
+function renderSyncDialog() {
+  const connected = !!connection()?.token;
+  element("sync-form").hidden = connected;
+  element("sync-now").hidden = !connected;
+  element("sync-explanation").textContent = connected
+    ? "This device shares decks and review progress with your other connected devices."
+    : "Enter the connection code from the administrator to share decks and review progress across devices.";
+}
+element("sync-open").addEventListener("click", () => {
+  renderSyncDialog();
+  element("sync-dialog").showModal();
+  if (!connection()?.token) element("sync-code").focus();
+});
+element("sync-close").addEventListener("click", () => element("sync-dialog").close());
+element("sync-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const button = element("sync-connect");
+  button.disabled = true;
+  updateSyncStatus("Connecting…");
+  try {
+    await store.connect(element("sync-code").value);
+    element("sync-code").value = "";
+    renderSyncDialog();
+  } catch (error) {
+    updateSyncStatus(error.message || "Could not connect. Try again.");
+  } finally {
+    button.disabled = false;
+  }
+});
+element("sync-now").addEventListener("click", () => store.syncNow().catch(() => {}));
 element("ai-settings-open").addEventListener("click", () => tutor.openAiSettings());
 element("again").addEventListener("click", () => advance(false));
 element("remember").addEventListener("click", () => advance(true));
@@ -690,7 +728,9 @@ try {
   notification.hidden = false;
   refreshCollection();
 }
-element("storage-footer").textContent = store.isMacBackend ? "Your collection is stored on this Mac." : "Your collection and review progress are saved on this device.";
+element("sync-open").hidden = store.isMacBackend;
+element("storage-footer").textContent = store.isMacBackend ? "Your collection is stored on this Mac."
+  : connection()?.token ? "Syncing connected devices…" : "Your collection and review progress are saved on this device.";
 if ("serviceWorker" in navigator && !macStudio) {
   navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).catch(() => {});
 }

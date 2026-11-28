@@ -16,7 +16,8 @@ import {
   mistralTextModels,
   mistralTtsModels,
   testMistralConnection,
-} from "./mistral.mjs?v=13";
+} from "./mistral.mjs?v=15";
+import { connection, sharedMistralKey } from "./sync.mjs?v=15";
 
 const storageKey = "bahasa-cards:ai:v1";
 const legacyGeminiKey = "bahasa-cards:gemini:v1";
@@ -128,7 +129,7 @@ export function getAiSettings() {
       ...aiDefaults,
       ...saved,
       version: currentVersion,
-      provider: saved.provider === "gemini" ? "gemini" : "mistral",
+      provider: !connection()?.token && saved.provider === "gemini" ? "gemini" : "mistral",
       geminiApiKey: cleanKey(saved.geminiApiKey),
       mistralApiKey: cleanKey(saved.mistralApiKey),
       localFocus: typeof saved.localFocus === "string" && saved.localFocus.trim()
@@ -141,7 +142,7 @@ export function getAiSettings() {
     const legacyKey = cleanKey(legacy.apiKey);
     const migrated = {
       ...aiDefaults,
-      provider: legacyKey ? "gemini" : aiDefaults.provider,
+      provider: legacyKey && !connection()?.token ? "gemini" : aiDefaults.provider,
       geminiApiKey: legacyKey,
       geminiTextModel: legacy.textModel && legacy.textModel !== "gemini-3.8-flash"
         ? legacy.textModel
@@ -190,13 +191,14 @@ export function providerLabel(provider = getAiSettings().provider) {
 }
 
 export function activeAiKey(settings = getAiSettings()) {
+  if (settings.provider === "mistral" && connection()?.mistralReady) return sharedMistralKey;
   return settings.provider === "gemini" ? settings.geminiApiKey : settings.mistralApiKey;
 }
 
 export function hasAiKey(provider) {
   const settings = getAiSettings();
   if (provider === "gemini") return Boolean(settings.geminiApiKey);
-  if (provider === "mistral") return Boolean(settings.mistralApiKey);
+  if (provider === "mistral") return Boolean(connection()?.mistralReady || settings.mistralApiKey);
   return Boolean(activeAiKey(settings));
 }
 
@@ -266,7 +268,7 @@ export async function testAiConnection(provider, candidateKey) {
     const res = await testGeminiConnection(candidateKey ?? settings.geminiApiKey, settings.geminiTextModel);
     return { ...res, provider: "gemini", providerName: "Gemini" };
   }
-  const res = await testMistralConnection(candidateKey ?? settings.mistralApiKey, settings.mistralTextModel);
+  const res = await testMistralConnection(candidateKey ?? activeAiKey(settings), settings.mistralTextModel);
   return { ...res, provider: "mistral", providerName: "Mistral" };
 }
 
@@ -351,7 +353,7 @@ export async function coachCardPractice({ card, mode, userText = "", history = [
   }
 
   return coachWithMistral({
-    apiKey: settings.mistralApiKey,
+    apiKey: activeAiKey(settings),
     model: settings.mistralTextModel,
     systemInstruction,
     recentHistory,
@@ -374,7 +376,7 @@ export async function generateIndonesianSpeech(text, { slow = false } = {}) {
     return { ...res, provider: "gemini", providerName: "Gemini" };
   }
   const res = await generateMistralSpeech(text, {
-    apiKey: settings.mistralApiKey,
+    apiKey: activeAiKey(settings),
     ttsModel: settings.mistralTtsModel,
     ttsVoice: settings.mistralTtsVoice,
   });

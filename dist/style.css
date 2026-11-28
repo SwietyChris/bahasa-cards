@@ -510,6 +510,9 @@ dialog::backdrop { background: #1e143a70; }
 .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: .9rem; margin-bottom: .5rem; }
 .dialog-content p { margin-bottom: 1rem; color: var(--muted); }
 .dialog-content > input { display: block; width: 100%; margin-bottom: .85rem; min-height: 2.75rem; }
+#sync-form { display: grid; gap: .55rem; margin-bottom: 1rem; }
+#sync-code { width: 100%; min-height: 2.75rem; padding: .6rem; border: 1px solid #c8bee7; border-radius: .5rem; font-size: 1rem; }
+#sync-connect { justify-self: start; }
 .dialog-content input::file-selector-button {
   border: 1px solid #cbc4dd;
   border-radius: .55rem;

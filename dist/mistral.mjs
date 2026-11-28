@@ -1,3 +1,5 @@
+import { connection, sharedMistralKey, syncOrigin } from "./sync.mjs?v=15";
+
 const apiBase = "https://api.mistral.ai/v1";
 const v2ApiBase = "https://api.mistral.ai/v2";
 const resolvedTextModels = new Map();
@@ -166,11 +168,15 @@ async function fetchMistralJson(path, apiKey, options = {}, timeoutMs = 45000, b
   }
   let response;
   try {
-    response = await fetch(`${base}${path}`, {
+    const shared = key === sharedMistralKey;
+    const token = shared ? connection()?.token : key;
+    if (!token) throw new Error("This device is not connected.");
+    const address = shared ? `${syncOrigin}/api/mistral/${base === v2ApiBase ? "v2" : "v1"}${path}` : `${base}${path}`;
+    response = await fetch(address, {
       ...options,
       headers: {
         ...(options.body ? { "Content-Type": "application/json" } : {}),
-        Authorization: `Bearer ${key}`,
+        Authorization: `Bearer ${token}`,
         ...(options.headers ?? {}),
       },
       signal: AbortSignal.timeout(timeoutMs),

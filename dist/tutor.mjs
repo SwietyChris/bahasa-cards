@@ -1,5 +1,6 @@
 import {
   aiProviders,
+  activeAiKey,
   coachCardPractice,
   fetchProviderVoices,
   getAiSettings,
@@ -8,8 +9,9 @@ import {
   providerLabel,
   saveAiSettings,
   testAiConnection,
-} from "./ai.mjs?v=13";
-import { listIndonesianVoices } from "./speech.mjs?v=13";
+} from "./ai.mjs?v=15";
+import { listIndonesianVoices } from "./speech.mjs?v=15";
+import { connection } from "./sync.mjs?v=15";
 
 export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowToggle, cardNavigation, navigateCard }) {
   const practiceDialog = element("practice-dialog");
@@ -78,6 +80,12 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     const meta = getProviderMeta(provider);
     element("ai-provider").value = provider;
     element("ai-key-help").textContent = meta.keyHelp;
+    const shared = !!connection()?.token;
+    element("ai-provider").disabled = shared;
+    element("ai-local-key").hidden = shared;
+    element("ai-shared-key").hidden = !shared;
+    element("ai-clear-local").hidden = !(shared && connection()?.mistralReady && settings.mistralApiKey);
+    if (shared) element("ai-key-help").textContent = "";
     element("ai-api-key-label").textContent = meta.keyLabel;
     element("ai-api-key").value = draftKeys[provider] ?? "";
     syncSavedKeyHint(provider, settings);
@@ -89,7 +97,7 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     populateSelect(element("ai-tts-model"), meta.ttsModels, settings[meta.ttsModelField]);
     populateSelect(element("ai-text-model"), meta.textModels, settings[meta.textModelField]);
 
-    const effectiveMistralKey = draftKeys.mistral?.trim() || settings.mistralApiKey;
+    const effectiveMistralKey = draftKeys.mistral?.trim() || activeAiKey({ ...settings, provider: "mistral" });
     if (provider === "mistral" && effectiveMistralKey) {
       refreshMistralVoices(effectiveMistralKey, settings[meta.ttsVoiceField]);
     }
@@ -137,6 +145,11 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     syncProviderLabels();
     element("practice-setup").hidden = ready;
     element("practice-workspace").hidden = !ready;
+    const shared = !!connection()?.token;
+    element("practice-local-setup").hidden = shared;
+    element("practice-setup-copy").textContent = shared
+      ? "The administrator is setting up Mistral. Your cards are ready to study."
+      : "Connect your Mistral AI or Google Gemini API key to get sentence feedback, AI pronunciation, and local Bali context.";
     element("practice-setup-status").classList.remove("error");
     element("practice-setup-status").textContent = "";
     element("practice-key-input").value = "";
@@ -497,8 +510,8 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     const saved = saveAiSettings(values);
     maskSavedInputs(values.provider, saved);
     syncProviderLabels();
-    if (values.provider === "mistral" && saved.mistralApiKey) {
-      refreshMistralVoices(saved.mistralApiKey, saved.mistralTtsVoice);
+    if (values.provider === "mistral" && activeAiKey(saved)) {
+      refreshMistralVoices(activeAiKey(saved), saved.mistralTtsVoice);
     }
     speakText("Selamat pagi, apa kabar?", element("ai-test-voice"), element("ai-status"));
   });
@@ -510,7 +523,7 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     maskSavedInputs(values.provider, saved);
     syncProviderLabels();
     const meta = getProviderMeta(values.provider);
-    const key = saved[meta.keyField];
+    const key = activeAiKey(saved);
     if (!key) {
       status.classList.add("error");
       status.textContent = `Enter a ${meta.keyLabel} first to test the connection.`;
@@ -545,6 +558,13 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     element("ai-status").classList.remove("error", "ok");
     element("ai-status").textContent = `${meta.name} API key removed from this browser. Device voice remains available.`;
     if (practiceDialog.open) syncPracticeMode();
+  });
+  element("ai-clear-local").addEventListener("click", () => {
+    if (!connection()?.mistralReady) return;
+    const saved = saveAiSettings({ mistralApiKey: "" });
+    applyProviderToAiForm("mistral", saved);
+    element("ai-status").textContent = "The old device key was removed. The shared Mistral service is still available.";
+    element("ai-status").classList.add("ok");
   });
   element("ai-form").addEventListener("submit", event => {
     event.preventDefault();
