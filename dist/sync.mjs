@@ -44,6 +44,49 @@ function mergeItems(base, local, remote, label) {
 }
 
 export function mergeLibraries(base, local, remote) {
+  const originalNames = new Set(base.decks.map(deck => deck.name.toLocaleLowerCase()));
+  const deckMap = new Map();
+  const cardMap = new Map();
+  const normalizeText = text => text.toLocaleLowerCase().replace(/\s+/g, " ").trim();
+  for (const incoming of remote.decks) {
+    const name = incoming.name.toLocaleLowerCase();
+    const matches = local.decks.filter(deck => deck.name.toLocaleLowerCase() === name);
+    if (originalNames.has(name) || matches.length !== 1 || matches[0].id === incoming.id) continue;
+    const localDeck = matches[0];
+    const localCards = local.cards.filter(card => card.deck === localDeck.id);
+    const remoteCards = remote.cards.filter(card => card.deck === incoming.id);
+    if (!localCards.length || !remoteCards.length) continue;
+    for (const card of remoteCards) {
+      const candidates = localCards.filter(item => normalizeText(item.english) === normalizeText(card.english) &&
+        normalizeText(item.indonesian) === normalizeText(card.indonesian));
+      if (candidates.length !== 1) throw new Error("The same deck has different cards on two devices. Sync is paused to preserve both copies.");
+      cardMap.set(card.id, candidates[0]);
+    }
+    deckMap.set(incoming.id, localDeck.id);
+  }
+  if (deckMap.size) {
+    const progress = {};
+    for (const [key, value] of Object.entries(remote.progress)) {
+      const separator = key.indexOf(":");
+      const replacement = cardMap.get(key.slice(separator + 1));
+      const mapped = replacement ? key.slice(0, separator + 1) + replacement.id : key;
+      if (progress[mapped] && !same(progress[mapped], value)) throw new Error("The same review changed on two devices. Sync is paused to preserve both copies.");
+      progress[mapped] = value;
+    }
+    remote = {
+      decks: remote.decks.map(deck => ({ ...deck, id: deckMap.get(deck.id) ?? deck.id })),
+      cards: remote.cards.map(card => {
+        const match = cardMap.get(card.id);
+        return {
+          ...card,
+          ...(match ? { id: match.id, english: match.english, indonesian: match.indonesian } : {}),
+          deck: deckMap.get(card.deck) ?? card.deck,
+          ...("originDeck" in card ? { originDeck: deckMap.get(card.originDeck) ?? card.originDeck } : {}),
+        };
+      }),
+      progress,
+    };
+  }
   const progress = {};
   const keys = new Set([...Object.keys(remote.progress), ...Object.keys(local.progress), ...Object.keys(base.progress)]);
   for (const key of keys) {

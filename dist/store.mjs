@@ -1,7 +1,7 @@
 import { normalizeCollection, packVersion, schedule } from "./cards.mjs?v=13";
 import {
   browserRecord, collectionWithProgress, mergeLibraries, persistBrowser, readShared, sameLibrary, storageKey, writeShared,
-} from "./sync.mjs?v=15";
+} from "./sync.mjs?v=16";
 
 export const macStudio = ["127.0.0.1", "localhost"].includes(location.hostname);
 

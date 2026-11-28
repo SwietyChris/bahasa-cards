@@ -4,7 +4,7 @@ import {
 } from "./cards.mjs?v=13";
 import { createAuthoring } from "./authoring.mjs?v=14";
 import { createSpeaker } from "./speech.mjs?v=15";
-import { createStore, macStudio } from "./store.mjs?v=15";
+import { createStore, macStudio } from "./store.mjs?v=16";
 import { connection } from "./sync.mjs?v=15";
 import { createTutorUI } from "./tutor.mjs?v=15";
 
