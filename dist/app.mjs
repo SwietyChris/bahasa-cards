@@ -6,7 +6,7 @@ import { createAuthoring } from "./authoring.mjs?v=14";
 import { createSpeaker } from "./speech.mjs?v=18";
 import { createStore, macStudio } from "./store.mjs?v=16";
 import { connection } from "./sync.mjs?v=15";
-import { createTutorUI } from "./tutor.mjs?v=18";
+import { createTutorUI } from "./tutor.mjs?v=19";
 
 const element = id => document.getElementById(id);
 const number = new Intl.NumberFormat("en");
@@ -332,6 +332,7 @@ function renderRound() {
   element("card-hint").textContent = revealed ? "Tap to show prompt" : "Tap to reveal";
   const canHearIndonesian = direction === "id" || revealed;
   element("speak-card").disabled = !canHearIndonesian;
+  element("speak-slower").disabled = !canHearIndonesian;
   element("speak-card").title = canHearIndonesian
     ? "Hear Indonesian pronunciation"
     : "Tap the card to reveal Indonesian first";
@@ -612,6 +613,12 @@ element("flashcard").addEventListener("click", () => {
 element("speak-card").addEventListener("click", () => {
   const card = currentEntry()?.card;
   if (card && (direction === "id" || revealed)) speakText(card.indonesian, element("speak-card"));
+});
+element("speak-slower").addEventListener("click", () => {
+  const card = currentEntry()?.card;
+  if (card && (direction === "id" || revealed)) {
+    speakText(card.indonesian, element("speak-slower"), element("speech-status"), { slow: true, speed: 0.5 });
+  }
 });
 element("speak-slow").addEventListener("click", () => {
   slowSpeech = !slowSpeech;

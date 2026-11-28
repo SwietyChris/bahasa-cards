@@ -10,10 +10,10 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="icon" type="image/png" href="./icon-192.png">
-  <link rel="stylesheet" href="./style.css?v=15">
+  <link rel="stylesheet" href="./style.css?v=19">
   <script defer src="./vendor/jszip.min.js"></script>
   <script defer src="./vendor/pdf-lib.min.js"></script>
-  <script type="module" src="./app.mjs?v=18"></script>
+  <script type="module" src="./app.mjs?v=19"></script>
 </head>
 <body>
   <header class="top">
@@ -114,6 +114,7 @@
               <div class="speak-group">
                 <button type="button" id="speak-card" class="pill-button">🔊 Listen</button>
                 <button type="button" id="speak-slow" class="pill-button compact-pill" aria-pressed="false" title="Toggle slower pronunciation">0.8×</button>
+                <button type="button" id="speak-slower" class="pill-button compact-pill" aria-label="Listen to word at 0.5 speed">0.5×</button>
               </div>
               <button type="button" id="practice-card" class="pill-button accent">Practice with AI</button>
             </div>
@@ -359,6 +360,7 @@
         <div class="speak-group">
           <button type="button" id="practice-speak" class="pill-button">🔊 Listen</button>
           <button type="button" id="practice-speak-slow" class="pill-button compact-pill" aria-pressed="false" title="Toggle slower pronunciation">0.8×</button>
+          <button type="button" id="practice-speak-slower" class="pill-button compact-pill" aria-label="Listen to word at 0.5 speed">0.5×</button>
         </div>
       </div>
       <div class="card-navigation" aria-label="Navigate practice cards">

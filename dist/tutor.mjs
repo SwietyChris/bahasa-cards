@@ -168,10 +168,16 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     const slow = document.createElement("button");
     slow.type = "button";
     slow.className = "pill-button compact-pill";
-    slow.textContent = "🐢 Slow";
-    slow.setAttribute("aria-label", "Listen slowly");
-    slow.addEventListener("click", () => speakText(text, slow, practiceStatus, { slow: true, speed: 0.65 }));
-    controls.append(button, slow);
+    slow.textContent = "0.8×";
+    slow.setAttribute("aria-label", "Listen at 0.8 speed");
+    slow.addEventListener("click", () => speakText(text, slow, practiceStatus, { slow: true, speed: 0.8 }));
+    const slower = document.createElement("button");
+    slower.type = "button";
+    slower.className = "pill-button compact-pill";
+    slower.textContent = "0.5×";
+    slower.setAttribute("aria-label", "Listen at 0.5 speed");
+    slower.addEventListener("click", () => speakText(text, slower, practiceStatus, { slow: true, speed: 0.5 }));
+    controls.append(button, slow, slower);
     return controls;
   }
 
@@ -431,6 +437,9 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
   practiceDialog.addEventListener("close", stopSpeech);
   element("practice-speak").addEventListener("click", () => {
     if (state.card) speakText(state.card.indonesian, element("practice-speak"), practiceStatus);
+  });
+  element("practice-speak-slower").addEventListener("click", () => {
+    if (state.card) speakText(state.card.indonesian, element("practice-speak-slower"), practiceStatus, { slow: true, speed: 0.5 });
   });
   element("practice-speak-slow").addEventListener("click", () => onSlowToggle());
   element("practice-open-ai").addEventListener("click", () => {
