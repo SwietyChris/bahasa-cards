@@ -135,14 +135,14 @@ export function createSpeaker() {
     activeUtterance = null;
   }
 
-  function speakWithBrowser(cleaned, { slow = false, token, onState }) {
+  function speakWithBrowser(cleaned, { slow = false, speed, token, onState }) {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
       onState?.("error", "Speech is unavailable in this browser.");
       return;
     }
     const utterance = new SpeechSynthesisUtterance(cleaned);
     utterance.lang = "id-ID";
-    utterance.rate = slow ? 0.72 : 0.92;
+    utterance.rate = speed ?? (slow ? 0.72 : 0.92);
     const voice = pickIndonesianVoice();
     if (voice) utterance.voice = voice;
     activeUtterance = utterance;
@@ -207,7 +207,7 @@ export function createSpeaker() {
     source.start(0);
   }
 
-  async function speak(rawText, { slow = false, onState } = {}) {
+  async function speak(rawText, { slow = false, speed, onState } = {}) {
     const cleaned = speakableIndonesian(rawText);
     if (!cleaned) return;
     stop();
@@ -221,7 +221,7 @@ export function createSpeaker() {
     const useAi = settings.voiceMode !== "browser" && Boolean(activeAiKey(settings)) && navigator.onLine !== false;
 
     if (!useAi) {
-      speakWithBrowser(cleaned, { slow: effectiveSlow, token, onState });
+      speakWithBrowser(cleaned, { slow: effectiveSlow, speed, token, onState });
       return;
     }
 
@@ -244,7 +244,7 @@ export function createSpeaker() {
       }
       await playBytes(bytes, token, onState, {
         detail: `${pName} (${voiceUsed} · ${modelUsed})`,
-        playbackRate: effectiveSlow ? 0.84 : 1,
+        playbackRate: speed ?? (effectiveSlow ? 0.84 : 1),
       });
       if (!fromCache && activeToken === token) {
         await writeCachedClip(cacheKey, bytes);
@@ -253,7 +253,7 @@ export function createSpeaker() {
       if (activeToken !== token) return;
       // Gracefully fall back to the device voice if AI TTS fails.
       if ("speechSynthesis" in window) {
-        speakWithBrowser(cleaned, { slow: effectiveSlow, token, onState });
+        speakWithBrowser(cleaned, { slow: effectiveSlow, speed, token, onState });
         onState?.("fallback", {
           providerName: pName,
           message: error?.message || "",

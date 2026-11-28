@@ -3,10 +3,10 @@ import {
   progressKey, restoreCardPlacement, returnCardFromReview, reviewDeckId, reviewDeckName, schedule, shuffled,
 } from "./cards.mjs?v=13";
 import { createAuthoring } from "./authoring.mjs?v=14";
-import { createSpeaker } from "./speech.mjs?v=15";
+import { createSpeaker } from "./speech.mjs?v=18";
 import { createStore, macStudio } from "./store.mjs?v=16";
 import { connection } from "./sync.mjs?v=15";
-import { createTutorUI } from "./tutor.mjs?v=17";
+import { createTutorUI } from "./tutor.mjs?v=18";
 
 const element = id => document.getElementById(id);
 const number = new Intl.NumberFormat("en");
@@ -77,7 +77,7 @@ function stopSpeech() {
   resetSpeakButton();
 }
 
-function speakText(text, button, statusElement = element("speech-status"), { slow = slowSpeech } = {}) {
+function speakText(text, button, statusElement = element("speech-status"), { slow = slowSpeech, speed } = {}) {
   if (!text) return;
   resetSpeakButton();
   if (statusElement) {
@@ -91,6 +91,7 @@ function speakText(text, button, statusElement = element("speech-status"), { slo
   activeSpeakLabel = original;
   speaker.speak(text, {
     slow,
+    speed,
     onState(state, detail) {
       if (state === "loading") {
         button.textContent = "Loading…";
