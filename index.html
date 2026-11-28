@@ -10,10 +10,10 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="icon" type="image/png" href="./icon-192.png">
-  <link rel="stylesheet" href="./style.css?v=13">
+  <link rel="stylesheet" href="./style.css?v=14">
   <script defer src="./vendor/jszip.min.js"></script>
   <script defer src="./vendor/pdf-lib.min.js"></script>
-  <script type="module" src="./app.mjs?v=13"></script>
+  <script type="module" src="./app.mjs?v=14"></script>
 </head>
 <body>
   <header class="top">
@@ -99,6 +99,10 @@
             <button type="button" id="shuffle" class="text-button" hidden>Shuffle cards</button>
           </div>
           <progress id="round-progress" value="0" max="1" aria-label="Cards completed this round"></progress>
+          <div class="card-navigation" aria-label="Navigate cards">
+            <button type="button" id="previous-card" class="button outline compact">← Previous</button>
+            <button type="button" id="following-card" class="button outline compact">Next →</button>
+          </div>
           <div class="flashcard-stage">
             <button type="button" id="flashcard" class="flashcard">
               <span id="card-side" class="card-side"></span>
@@ -131,6 +135,7 @@
           <h2 id="done-title" tabindex="-1"></h2>
           <p id="done-text"></p>
           <button type="button" id="next-round" class="button primary"></button>
+          <button type="button" id="back-to-cards" class="button outline" hidden>Back to cards</button>
         </div>
       </section>
       <section id="library-view" aria-labelledby="library-title" hidden>
@@ -142,6 +147,7 @@
           <div class="library-actions">
             <button type="button" id="rename-deck" class="button outline compact" hidden>Rename deck</button>
             <button type="button" id="study-deck" class="button outline compact" hidden>Study deck</button>
+            <button type="button" id="share-deck" class="button outline compact" hidden>Share deck</button>
             <button type="button" id="import-open" class="button outline compact">Import</button>
             <button type="button" id="export-cards" class="button outline compact">Backup</button>
           </div>
@@ -337,8 +343,13 @@
           <button type="button" id="practice-speak-slow" class="pill-button compact-pill" aria-pressed="false" title="Toggle slower pronunciation">0.8×</button>
         </div>
       </div>
+      <div class="card-navigation" aria-label="Navigate practice cards">
+        <button type="button" id="practice-previous" class="button outline compact">← Previous</button>
+        <button type="button" id="practice-following" class="button outline compact">Next →</button>
+      </div>
       <div id="practice-setup" class="practice-setup" hidden>
         <p id="practice-setup-copy">Connect your Mistral AI or Google Gemini API key to get sentence feedback, AI pronunciation, and local Bali context.</p>
+        <div id="practice-local-setup">
         <div class="field">
           <label for="practice-provider">AI provider</label>
           <select id="practice-provider"></select>
@@ -353,6 +364,7 @@
           <button type="button" id="practice-open-ai" class="text-button">AI &amp; Voice settings</button>
         </div>
         <p id="practice-setup-status" class="help-text" role="status"></p>
+        </div>
       </div>
       <div id="practice-workspace" hidden>
         <div class="practice-starters">
@@ -378,7 +390,7 @@
         <h2 id="ai-title">AI &amp; Voice Settings</h2>
         <button type="button" id="ai-close" class="text-button">Close</button>
       </div>
-      <p class="ai-note">Pronunciation works right away using your device’s voice. Add a Mistral AI or Google Gemini API key for natural AI voices and Bali sentence coaching — saved only on this device.</p>
+      <p class="ai-note" id="ai-note">Pronunciation uses your device’s voice or the connected AI service.</p>
       <fieldset class="ai-group">
         <legend>AI Provider &amp; API Key</legend>
         <div class="field">
@@ -386,6 +398,8 @@
           <select id="ai-provider"></select>
         </div>
         <p id="ai-key-help" class="help-text"></p>
+        <p id="ai-shared-key" class="help-text" hidden>Mistral is managed by the administrator for connected devices.</p>
+        <div id="ai-local-key">
         <label class="file-label" id="ai-api-key-label" for="ai-api-key">Mistral API key</label>
         <p id="ai-key-saved" class="help-text ok" hidden>Saved on this device (hidden — leave blank to keep).</p>
         <div class="inline-field">
@@ -396,6 +410,7 @@
           <a id="ai-get-key" class="button outline compact" href="https://console.mistral.ai/api-keys" target="_blank" rel="noopener">Open Mistral console</a>
           <button type="button" id="ai-test-key" class="button outline compact">Test connection</button>
           <button type="button" id="ai-clear-key" class="text-button danger-text">Clear key</button>
+        </div>
         </div>
       </fieldset>
       <fieldset class="ai-group">

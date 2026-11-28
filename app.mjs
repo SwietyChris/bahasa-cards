@@ -2,10 +2,10 @@ import {
   examples, intervalDays, isDue, localDay, moveCardToReview, newQueue, normalizeCollection,
   progressKey, restoreCardPlacement, returnCardFromReview, reviewDeckId, reviewDeckName, schedule, shuffled,
 } from "./cards.mjs?v=13";
-import { createAuthoring } from "./authoring.mjs?v=13";
+import { createAuthoring } from "./authoring.mjs?v=14";
 import { createSpeaker } from "./speech.mjs?v=13";
 import { createStore, macStudio } from "./store.mjs?v=13";
-import { createTutorUI } from "./tutor.mjs?v=13";
+import { createTutorUI } from "./tutor.mjs?v=14";
 
 const element = id => document.getElementById(id);
 const number = new Intl.NumberFormat("en");
@@ -46,6 +46,8 @@ let order = initialPrefs.order;
 let slowSpeech = initialPrefs.slowSpeech;
 let view = "decks";
 let queue = [];
+let roundEntries = [];
+let cardIndex = -1;
 let roundSize = 0;
 let day = localDay();
 let revealed = false;
@@ -136,6 +138,11 @@ const tutor = createTutorUI(element, {
   speakText,
   stopSpeech,
   getSlow: () => slowSpeech,
+  cardNavigation: () => ({ previous: cardIndex > 0, next: cardIndex < roundEntries.length - 1 }),
+  navigateCard(offset) {
+    showCard(cardIndex + offset);
+    return currentEntry()?.card;
+  },
   onSlowToggle() {
     slowSpeech = !slowSpeech;
     savePrefs();
@@ -234,6 +241,24 @@ function clearSpeechStatus() {
   box.hidden = true;
 }
 
+function currentEntry() {
+  return roundEntries[cardIndex];
+}
+
+function nextPending(after) {
+  const next = roundEntries.findIndex((entry, index) => index > after && entry.pending);
+  return next >= 0 ? next : roundEntries.findIndex(entry => entry.pending);
+}
+
+function showCard(index) {
+  if (transferring || !roundEntries[index]) return;
+  stopSpeech();
+  clearSpeechStatus();
+  cardIndex = index;
+  revealed = false;
+  renderRound();
+}
+
 function startRound(forceShuffle = false) {
   stopSpeech();
   clearSpeechStatus();
@@ -241,6 +266,8 @@ function startRound(forceShuffle = false) {
   const candidates = studyCards();
   queue = newQueue(candidates, activeProgress(), direction, mode, day);
   if (forceShuffle || order === "shuffled") queue = shuffled(queue);
+  roundEntries = queue.map(card => ({ card, pending: true }));
+  cardIndex = roundEntries.length ? 0 : -1;
   roundSize = queue.length;
   element("study-context").textContent = `${deckName()} · ${count(candidates.length, "card")}`;
   revealed = false;
@@ -248,10 +275,12 @@ function startRound(forceShuffle = false) {
 }
 
 function renderRound() {
-  element("study-round").hidden = !queue.length;
-  element("round-done").hidden = !!queue.length;
+  const entry = currentEntry();
+  element("study-round").hidden = !entry;
+  element("round-done").hidden = !!entry;
+  element("back-to-cards").hidden = !roundEntries.length;
   syncSlowUI();
-  if (!queue.length) {
+  if (!entry) {
     const reviewed = studyCards();
     if (!reviewed.length) {
       if (selectedDeck === reviewDeckId && !deckCards().length) {
@@ -279,7 +308,10 @@ function renderRound() {
   element("round-progress").max = roundSize;
   element("round-progress").value = roundSize - queue.length;
   element("shuffle").hidden = queue.length < 2;
-  const card = queue[0];
+  element("shuffle").disabled = transferring;
+  element("previous-card").disabled = transferring || cardIndex <= 0;
+  element("following-card").disabled = transferring || cardIndex >= roundEntries.length - 1;
+  const card = entry.card;
   const language = revealed ? otherLanguage(direction) : direction;
   const prompt = card[languageKey[language]];
   element("flashcard").dataset.answer = String(revealed);
@@ -294,8 +326,11 @@ function renderRound() {
   element("speak-card").title = canHearIndonesian
     ? "Hear Indonesian pronunciation"
     : "Tap the card to reveal Indonesian first";
-  element("again").disabled = !revealed;
-  element("remember").disabled = !revealed;
+  element("again").disabled = !revealed || !entry.pending || transferring;
+  element("remember").disabled = !revealed || !entry.pending || transferring;
+  element("skip").disabled = !entry.pending || transferring;
+  element("again-note").textContent = entry.pending ? "Returns this round"
+    : entry.skipped ? "Skipped this round" : "Already completed";
   const inReview = card.deck === reviewDeckId;
   const transferBtn = element("transfer-review");
   transferBtn.textContent = inReview
@@ -304,13 +339,14 @@ function renderRound() {
   transferBtn.disabled = transferring;
   const step = activeProgress()[progressKey(direction, card)]?.step ?? 0;
   const next = intervalDays[Math.min(step, intervalDays.length - 1)];
-  element("remember-note").textContent = `Review in ${count(next, "day")}`;
+  element("remember-note").textContent = entry.pending ? `Review in ${count(next, "day")}` : "";
 }
 
 
 function advance(remembered) {
-  const card = queue[0];
-  if (!card || (remembered !== null && !revealed)) return;
+  const entry = currentEntry();
+  const card = entry?.card;
+  if (!card || !entry.pending || transferring || (remembered !== null && !revealed)) return;
   stopSpeech();
   clearSpeechStatus();
   if (remembered !== null) {
@@ -321,11 +357,17 @@ function advance(remembered) {
       catch { setMessage("This review could not be saved. You can skip the card and keep studying."); return; }
     }
   }
-  queue.shift();
-  if (remembered === false) queue.push(card);
+  entry.pending = false;
+  entry.skipped = remembered === null;
+  queue = queue.filter(item => item.id !== card.id);
+  if (remembered === false) {
+    queue.push(card);
+    roundEntries.push({ card, pending: true });
+  }
+  cardIndex = nextPending(cardIndex);
   revealed = false;
   renderRound();
-  element(queue.length ? "flashcard" : "done-title").focus();
+  element(currentEntry() ? "flashcard" : "done-title").focus();
 }
 
 async function transferCard(card, { inQuiz = false } = {}) {
@@ -337,7 +379,7 @@ async function transferCard(card, { inQuiz = false } = {}) {
   stopSpeech();
   clearSpeechStatus();
   transferring = true;
-  if (!inQuiz) element("transfer-review").disabled = true;
+  if (!inQuiz) renderRound();
   const snapshot = {
     id: card.id,
     deck: card.deck ?? null,
@@ -354,11 +396,15 @@ async function transferCard(card, { inQuiz = false } = {}) {
       return outcome.collection;
     }, { preserveRound: true });
     if (!inQuiz) {
+      const earlierRemoved = roundEntries.slice(0, cardIndex).filter(entry => entry.card.id === card.id).length;
+      const nextPosition = cardIndex - earlierRemoved;
       queue = queue.filter(item => item.id !== card.id);
+      roundEntries = roundEntries.filter(entry => entry.card.id !== card.id);
+      cardIndex = nextPending(nextPosition - 1);
       revealed = false;
       element("study-context").textContent = `${deckName()} · ${count(studyCards().length, "card")}`;
       renderRound();
-      element(queue.length ? "flashcard" : "done-title").focus();
+      element(currentEntry() ? "flashcard" : "done-title").focus();
     } else if (quiz?.cards[quiz.index]?.id === card.id && outcome?.card) {
       quiz.cards[quiz.index] = outcome.card;
       syncQuizTransferButton(outcome.card);
@@ -378,6 +424,8 @@ async function transferCard(card, { inQuiz = false } = {}) {
           const belongsHere = roundDeck === allCards || restored.card.deck === roundDeck;
           if (belongsHere && !queue.some(item => item.id === restored.card.id)) {
             queue.unshift(restored.card);
+            roundEntries.unshift({ card: restored.card, pending: true });
+            cardIndex = 0;
             roundSize = Math.max(roundSize, queue.length);
             revealed = false;
           }
@@ -394,7 +442,7 @@ async function transferCard(card, { inQuiz = false } = {}) {
     setMessage(error.message || "Could not move card.");
   } finally {
     transferring = false;
-    if (!inQuiz && queue.length) renderRound();
+    if (!inQuiz) renderRound();
   }
 }
 
@@ -535,8 +583,17 @@ element("study-order").addEventListener("change", event => {
 element("shuffle").addEventListener("click", () => {
   stopSpeech();
   queue = shuffled(queue);
+  const completed = roundEntries.filter(entry => !entry.pending);
+  roundEntries = [...completed, ...queue.map(card => ({ card, pending: true }))];
+  cardIndex = completed.length;
   revealed = false;
   renderRound();
+});
+element("previous-card").addEventListener("click", () => showCard(cardIndex - 1));
+element("following-card").addEventListener("click", () => showCard(cardIndex + 1));
+element("back-to-cards").addEventListener("click", () => {
+  showCard(roundEntries.length - 1);
+  element("flashcard").focus();
 });
 element("flashcard").addEventListener("click", () => {
   stopSpeech();
@@ -544,7 +601,7 @@ element("flashcard").addEventListener("click", () => {
   renderRound();
 });
 element("speak-card").addEventListener("click", () => {
-  const card = queue[0];
+  const card = currentEntry()?.card;
   if (card && (direction === "id" || revealed)) speakText(card.indonesian, element("speak-card"));
 });
 element("speak-slow").addEventListener("click", () => {
@@ -553,10 +610,12 @@ element("speak-slow").addEventListener("click", () => {
   syncSlowUI();
 });
 element("practice-card").addEventListener("click", () => {
-  if (queue[0]) tutor.openPractice(queue[0]);
+  const card = currentEntry()?.card;
+  if (card) tutor.openPractice(card);
 });
 element("transfer-review").addEventListener("click", () => {
-  if (queue[0]) transferCard(queue[0]);
+  const card = currentEntry()?.card;
+  if (card) transferCard(card);
 });
 element("message-undo").addEventListener("click", async () => {
   const action = undoHandler;
@@ -587,7 +646,7 @@ element("next-round").addEventListener("click", () => {
     savePrefs();
   }
   startRound();
-  if (queue.length) element("flashcard").focus();
+  if (currentEntry()) element("flashcard").focus();
 });
 element("quiz-direction").addEventListener("change", startQuiz);
 element("quiz-speak").addEventListener("click", () => {

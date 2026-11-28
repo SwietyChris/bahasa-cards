@@ -11,7 +11,7 @@ import {
 } from "./ai.mjs?v=13";
 import { listIndonesianVoices } from "./speech.mjs?v=13";
 
-export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowToggle }) {
+export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowToggle, cardNavigation, navigateCard }) {
   const practiceDialog = element("practice-dialog");
   const aiDialog = element("ai-dialog");
   const thread = element("practice-thread");
@@ -20,6 +20,7 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
   const resetBtn = element("practice-reset");
 
   let state = { card: null, history: [], busy: false };
+  const conversations = new Map();
   let activeModalProvider = getAiSettings().provider;
   let draftKeys = { gemini: "", mistral: "" };
   let voiceFetchToken = 0;
@@ -261,6 +262,12 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     box.scrollIntoView({ block: "nearest" });
   }
 
+  function updateCardNavigation() {
+    const navigation = cardNavigation();
+    element("practice-previous").disabled = state.busy || !navigation.previous;
+    element("practice-following").disabled = state.busy || !navigation.next;
+  }
+
   function setBusy(busy, label = "") {
     state.busy = busy;
     practiceStatus.classList.remove("error");
@@ -268,10 +275,12 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     for (const id of ["practice-send", "practice-ask-bali", "practice-ask-examples", "practice-reset"]) {
       element(id).disabled = busy;
     }
+    updateCardNavigation();
   }
 
   async function runPractice(mode, userText = "", label = "", { skipUserBubble = false } = {}) {
     if (!state.card || state.busy) return;
+    const requestState = state;
     const labelProvider = providerLabel();
     const isFollowup = state.history.length > 0;
     const effectiveMode = isFollowup && mode === "sentence" ? "followup" : mode;
@@ -284,11 +293,12 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     setBusy(true, `Asking ${labelProvider}…`);
     try {
       const response = await coachCardPractice({
-        card: state.card,
+        card: requestState.card,
         mode: effectiveMode,
         userText,
-        history: state.history,
+        history: requestState.history,
       });
+      if (state !== requestState) return;
       if (Array.isArray(response.history)) {
         state.history = response.history;
         resetBtn.hidden = !state.history.length;
@@ -297,14 +307,19 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
       appendCoachTurn(response.result);
       practiceStatus.textContent = "";
     } catch (error) {
+      if (state !== requestState) return;
       pendingBubble.remove();
       practiceStatus.classList.add("error");
       practiceStatus.textContent = error.message;
       appendErrorTurn(error, () => runPractice(mode, userText, label, { skipUserBubble: true }));
     } finally {
       pendingBubble.remove();
-      setBusy(false);
-      if (practiceDialog.open) practiceInput.focus();
+      if (state === requestState) {
+        setBusy(false);
+        if (practiceDialog.open) practiceInput.focus();
+      } else {
+        requestState.busy = false;
+      }
     }
   }
 
@@ -320,10 +335,16 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     if (!card) return;
     stopSpeech();
     if (state.card?.id !== card.id) {
-      state = { card, history: [], busy: false };
-      thread.replaceChildren();
-      resetBtn.hidden = true;
-      practiceInput.value = "";
+      if (state.card) {
+        state.nodes = [...thread.childNodes];
+        state.input = practiceInput.value;
+        conversations.set(state.card.id, state);
+      }
+      state = conversations.get(card.id) ?? { card, history: [], busy: false };
+      state.card = card;
+      thread.replaceChildren(...(state.nodes ?? []));
+      resetBtn.hidden = !state.history.length;
+      practiceInput.value = state.input ?? "";
     }
     practiceStatus.classList.remove("error");
     practiceStatus.textContent = "";
@@ -331,9 +352,18 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     element("practice-en-word").textContent = card.english;
     element("practice-speak-slow").setAttribute("aria-pressed", String(getSlow()));
     syncPracticeMode();
-    practiceDialog.showModal();
+    setBusy(state.busy, state.busy ? `Asking ${providerLabel()}…` : "");
+    if (!practiceDialog.open) practiceDialog.showModal();
     if (hasAiKey()) practiceInput.focus();
     else element("practice-key-input").focus();
+  }
+
+  for (const [id, offset] of [["practice-previous", -1], ["practice-following", 1]]) {
+    element(id).addEventListener("click", () => {
+      if (state.busy) return;
+      const card = navigateCard(offset);
+      if (card) openPractice(card);
+    });
   }
 
   function openAiSettings() {
