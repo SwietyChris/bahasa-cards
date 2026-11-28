@@ -6,7 +6,7 @@ import { createAuthoring } from "./authoring.mjs?v=14";
 import { createSpeaker } from "./speech.mjs?v=15";
 import { createStore, macStudio } from "./store.mjs?v=16";
 import { connection } from "./sync.mjs?v=15";
-import { createTutorUI } from "./tutor.mjs?v=15";
+import { createTutorUI } from "./tutor.mjs?v=17";
 
 const element = id => document.getElementById(id);
 const number = new Intl.NumberFormat("en");
@@ -77,7 +77,7 @@ function stopSpeech() {
   resetSpeakButton();
 }
 
-function speakText(text, button, statusElement = element("speech-status")) {
+function speakText(text, button, statusElement = element("speech-status"), { slow = slowSpeech } = {}) {
   if (!text) return;
   resetSpeakButton();
   if (statusElement) {
@@ -90,7 +90,7 @@ function speakText(text, button, statusElement = element("speech-status")) {
   activeSpeakButton = button;
   activeSpeakLabel = original;
   speaker.speak(text, {
-    slow: slowSpeech,
+    slow,
     onState(state, detail) {
       if (state === "loading") {
         button.textContent = "Loading…";

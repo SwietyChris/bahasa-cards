@@ -158,12 +158,21 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
   }
 
   function makeListenButton(text) {
+    const controls = document.createElement("div");
+    controls.className = "speak-group";
     const button = document.createElement("button");
     button.type = "button";
     button.className = "pill-button compact-pill";
     button.textContent = "🔊 Listen";
     button.addEventListener("click", () => speakText(text, button, practiceStatus));
-    return button;
+    const slow = document.createElement("button");
+    slow.type = "button";
+    slow.className = "pill-button compact-pill";
+    slow.textContent = "🐢 Slow";
+    slow.setAttribute("aria-label", "Listen slowly");
+    slow.addEventListener("click", () => speakText(text, slow, practiceStatus, { slow: true }));
+    controls.append(button, slow);
+    return controls;
   }
 
   function appendUserTurn(label) {
