@@ -10,7 +10,7 @@ import {
   saveAiSettings,
   testAiConnection,
 } from "./ai.mjs?v=15";
-import { listIndonesianVoices } from "./speech.mjs?v=15";
+import { listIndonesianVoices } from "./speech.mjs?v=18";
 import { connection } from "./sync.mjs?v=15";
 
 export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowToggle, cardNavigation, navigateCard }) {
@@ -170,7 +170,7 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     slow.className = "pill-button compact-pill";
     slow.textContent = "🐢 Slow";
     slow.setAttribute("aria-label", "Listen slowly");
-    slow.addEventListener("click", () => speakText(text, slow, practiceStatus, { slow: true }));
+    slow.addEventListener("click", () => speakText(text, slow, practiceStatus, { slow: true, speed: 0.65 }));
     controls.append(button, slow);
     return controls;
   }
