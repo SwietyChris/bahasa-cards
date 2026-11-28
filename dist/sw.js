@@ -1,5 +1,5 @@
 const prefix = `bahasa-cards:${new URL(self.registration.scope).pathname}:`;
-const cacheName = prefix + "13";
+const cacheName = prefix + "14";
 const assets = [
   "./", "./index.html", "./style.css", "./app.mjs", "./cards.mjs", "./capture.mjs",
   "./authoring.mjs", "./store.mjs", "./ai.mjs", "./mistral.mjs", "./gemini.mjs",

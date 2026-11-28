@@ -184,6 +184,7 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
     element("rename-deck").hidden = !activeDeck || activeDeck === reviewDeckId;
     element("study-deck").hidden = !activeDeck;
     element("study-deck").disabled = !cards.some(card => !card.needsReview);
+    element("share-deck").hidden = !activeDeck;
     for (const id of ["export-cards", "import-open", "library-select"]) element(id).hidden = !!activeDeck;
     element("export-cards").disabled = !store.data.decks.length && !store.data.cards.length;
     element("review-field").hidden = !toReview;
@@ -340,6 +341,31 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
   function saveBackup() {
     const body = JSON.stringify({ version: packVersion, ...store.data }, null, 2) + "\n";
     saveDownload(new Blob([body], { type: "application/json" }), "bahasa-studio-decks.json");
+  }
+
+  async function shareDeck() {
+    if (!activeDeck) return;
+    const cards = store.data.cards.filter(card => card.deck === activeDeck);
+    const deckIds = new Set([activeDeck, ...cards.map(card => card.originDeck).filter(Boolean)]);
+    const decks = store.data.decks.filter(deck => deckIds.has(deck.id));
+    if (!decks.some(deck => deck.id === activeDeck)) decks.push({ id: activeDeck, name: nameOf(activeDeck) });
+    const title = nameOf(activeDeck);
+    const filename = "bahasa-" + (title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "deck") + ".json";
+    const body = JSON.stringify({ version: packVersion, decks, cards }, null, 2) + "\n";
+    const file = new File([body], filename, { type: "application/json" });
+    try {
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ title, files: [file] });
+      } else {
+        saveDownload(file, filename);
+        setMessage("Deck downloaded. Send the JSON file to your other device and choose Import deck there.");
+      }
+    } catch (error) {
+      if (error.name !== "AbortError") {
+        saveDownload(file, filename);
+        setMessage("Deck downloaded. Send the JSON file to your other device and choose Import deck there.");
+      }
+    }
   }
 
   async function exportList(type) {
@@ -511,6 +537,7 @@ export function createAuthoring(element, { store, show, currentView, setMessage,
   }
   element("show-more").addEventListener("click", () => { limit += 50; renderLibrary(); });
   element("export-cards").addEventListener("click", saveBackup);
+  element("share-deck").addEventListener("click", shareDeck);
   element("export-excel").addEventListener("click", () => exportList("xlsx"));
   element("export-pdf").addEventListener("click", () => exportList("pdf"));
   element("import-first").addEventListener("click", openImport);
