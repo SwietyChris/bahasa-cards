@@ -10,10 +10,10 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="icon" type="image/png" href="./icon-192.png">
-  <link rel="stylesheet" href="./style.css?v=14">
+  <link rel="stylesheet" href="./style.css?v=15">
   <script defer src="./vendor/jszip.min.js"></script>
   <script defer src="./vendor/pdf-lib.min.js"></script>
-  <script type="module" src="./app.mjs?v=14"></script>
+  <script type="module" src="./app.mjs?v=15"></script>
 </head>
 <body>
   <header class="top">
@@ -29,6 +29,7 @@
         <button type="button" id="quiz-tab" class="nav-button">Quiz</button>
       </nav>
       <div class="top-actions">
+        <button type="button" id="sync-open" class="button outline compact">Connect devices</button>
         <button type="button" id="ai-settings-open" class="button outline compact">AI &amp; Voice</button>
         <button type="button" id="new-deck" class="button primary compact">New deck</button>
       </div>
@@ -327,6 +328,23 @@
       </div>
     </form>
   </dialog>
+  <dialog id="sync-dialog" aria-labelledby="sync-title">
+    <div class="dialog-content">
+      <div class="dialog-head">
+        <h2 id="sync-title">Connect devices</h2>
+        <button type="button" id="sync-close" class="text-button">Close</button>
+      </div>
+      <p id="sync-explanation">Enter the connection code from the administrator to share decks and review progress across devices.</p>
+      <form id="sync-form">
+        <label for="sync-code">Connection code</label>
+        <input id="sync-code" type="password" autocomplete="off" spellcheck="false" required>
+        <button type="submit" id="sync-connect" class="button primary compact">Connect</button>
+      </form>
+      <button type="button" id="sync-now" class="button outline compact" hidden>Sync now</button>
+      <p id="sync-status" role="status"></p>
+      <p><a href="https://wei-chien-bahasa-sync.sprightlyzinnia8.chatgpt.site/admin" target="_blank" rel="noopener">Administrator setup</a></p>
+    </div>
+  </dialog>
   <dialog id="practice-dialog" class="wide-dialog" aria-labelledby="practice-title">
     <div class="dialog-content">
       <div class="dialog-head">
@@ -398,7 +416,10 @@
           <select id="ai-provider"></select>
         </div>
         <p id="ai-key-help" class="help-text"></p>
-        <p id="ai-shared-key" class="help-text" hidden>Mistral is managed by the administrator for connected devices.</p>
+        <div id="ai-shared-key" hidden>
+          <p class="help-text">Mistral is managed by the administrator for connected devices.</p>
+          <button type="button" id="ai-clear-local" class="text-button" hidden>Remove old key from this device</button>
+        </div>
         <div id="ai-local-key">
         <label class="file-label" id="ai-api-key-label" for="ai-api-key">Mistral API key</label>
         <p id="ai-key-saved" class="help-text ok" hidden>Saved on this device (hidden — leave blank to keep).</p>
