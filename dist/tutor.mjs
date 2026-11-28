@@ -10,10 +10,10 @@ import {
   saveAiSettings,
   testAiConnection,
 } from "./ai.mjs?v=15";
-import { listIndonesianVoices } from "./speech.mjs?v=18";
+import { listIndonesianVoices } from "./speech.mjs?v=20";
 import { connection } from "./sync.mjs?v=15";
 
-export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowToggle, cardNavigation, navigateCard }) {
+export function createTutorUI(element, { speakText, stopSpeech, getSlow, getSlower, onSlowToggle, onSlowerToggle, cardNavigation, navigateCard }) {
   const practiceDialog = element("practice-dialog");
   const aiDialog = element("ai-dialog");
   const thread = element("practice-thread");
@@ -164,19 +164,21 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     button.type = "button";
     button.className = "pill-button compact-pill";
     button.textContent = "🔊 Listen";
-    button.addEventListener("click", () => speakText(text, button, practiceStatus));
+    button.addEventListener("click", () => speakText(text, button, practiceStatus, { requireAi: true }));
     const slow = document.createElement("button");
     slow.type = "button";
-    slow.className = "pill-button compact-pill";
+    slow.className = "pill-button compact-pill practice-speed-08";
     slow.textContent = "0.8×";
-    slow.setAttribute("aria-label", "Listen at 0.8 speed");
-    slow.addEventListener("click", () => speakText(text, slow, practiceStatus, { slow: true, speed: 0.8 }));
+    slow.setAttribute("aria-label", "Select 0.8× audio speed");
+    slow.setAttribute("aria-pressed", String(getSlow()));
+    slow.addEventListener("click", () => onSlowToggle());
     const slower = document.createElement("button");
     slower.type = "button";
-    slower.className = "pill-button compact-pill";
-    slower.textContent = "0.5×";
-    slower.setAttribute("aria-label", "Listen at 0.5 speed");
-    slower.addEventListener("click", () => speakText(text, slower, practiceStatus, { slow: true, speed: 0.5 }));
+    slower.className = "pill-button compact-pill practice-speed-07";
+    slower.textContent = "0.7×";
+    slower.setAttribute("aria-label", "Select 0.7× audio speed");
+    slower.setAttribute("aria-pressed", String(getSlower()));
+    slower.addEventListener("click", () => onSlowerToggle());
     controls.append(button, slow, slower);
     return controls;
   }
@@ -378,7 +380,7 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
     practiceStatus.textContent = "";
     element("practice-id-word").textContent = card.indonesian;
     element("practice-en-word").textContent = card.english;
-    element("practice-speak-slow").setAttribute("aria-pressed", String(getSlow()));
+    syncSlowButtons(getSlow(), getSlower());
     syncPracticeMode();
     setBusy(state.busy, state.busy ? `Asking ${providerLabel()}…` : "");
     if (!practiceDialog.open) practiceDialog.showModal();
@@ -436,11 +438,9 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
   element("practice-close").addEventListener("click", () => { stopSpeech(); practiceDialog.close(); });
   practiceDialog.addEventListener("close", stopSpeech);
   element("practice-speak").addEventListener("click", () => {
-    if (state.card) speakText(state.card.indonesian, element("practice-speak"), practiceStatus);
+    if (state.card) speakText(state.card.indonesian, element("practice-speak"), practiceStatus, { requireAi: true });
   });
-  element("practice-speak-slower").addEventListener("click", () => {
-    if (state.card) speakText(state.card.indonesian, element("practice-speak-slower"), practiceStatus, { slow: true, speed: 0.5 });
-  });
+  element("practice-speak-slower").addEventListener("click", () => onSlowerToggle());
   element("practice-speak-slow").addEventListener("click", () => onSlowToggle());
   element("practice-open-ai").addEventListener("click", () => {
     practiceDialog.close();
@@ -596,12 +596,17 @@ export function createTutorUI(element, { speakText, stopSpeech, getSlow, onSlowT
 
   syncProviderLabels();
 
+  function syncSlowButtons(slow, slower) {
+    element("practice-speak-slow").setAttribute("aria-pressed", String(slow));
+    element("practice-speak-slower").setAttribute("aria-pressed", String(slower));
+    thread.querySelectorAll(".practice-speed-08").forEach(button => button.setAttribute("aria-pressed", String(slow)));
+    thread.querySelectorAll(".practice-speed-07").forEach(button => button.setAttribute("aria-pressed", String(slower)));
+  }
+
   return {
     openPractice,
     openAiSettings,
     syncProviderLabels,
-    syncSlowButtons(slow) {
-      element("practice-speak-slow").setAttribute("aria-pressed", String(slow));
-    },
+    syncSlowButtons,
   };
 }

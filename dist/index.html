@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="./style.css?v=19">
   <script defer src="./vendor/jszip.min.js"></script>
   <script defer src="./vendor/pdf-lib.min.js"></script>
-  <script type="module" src="./app.mjs?v=19"></script>
+  <script type="module" src="./app.mjs?v=20"></script>
 </head>
 <body>
   <header class="top">
@@ -113,8 +113,8 @@
             <div class="card-assist" id="card-assist">
               <div class="speak-group">
                 <button type="button" id="speak-card" class="pill-button">🔊 Listen</button>
-                <button type="button" id="speak-slow" class="pill-button compact-pill" aria-pressed="false" title="Toggle slower pronunciation">0.8×</button>
-                <button type="button" id="speak-slower" class="pill-button compact-pill" aria-label="Listen to word at 0.5 speed">0.5×</button>
+                <button type="button" id="speak-slow" class="pill-button compact-pill" aria-pressed="false" title="Select 0.8× audio speed">0.8×</button>
+                <button type="button" id="speak-slower" class="pill-button compact-pill" aria-label="Select 0.7× audio speed" aria-pressed="false" title="Select 0.7× audio speed">0.7×</button>
               </div>
               <button type="button" id="practice-card" class="pill-button accent">Practice with AI</button>
             </div>
@@ -359,8 +359,8 @@
         </div>
         <div class="speak-group">
           <button type="button" id="practice-speak" class="pill-button">🔊 Listen</button>
-          <button type="button" id="practice-speak-slow" class="pill-button compact-pill" aria-pressed="false" title="Toggle slower pronunciation">0.8×</button>
-          <button type="button" id="practice-speak-slower" class="pill-button compact-pill" aria-label="Listen to word at 0.5 speed">0.5×</button>
+          <button type="button" id="practice-speak-slow" class="pill-button compact-pill" aria-pressed="false" title="Select 0.8× audio speed">0.8×</button>
+          <button type="button" id="practice-speak-slower" class="pill-button compact-pill" aria-label="Select 0.7× audio speed" aria-pressed="false" title="Select 0.7× audio speed">0.7×</button>
         </div>
       </div>
       <div class="card-navigation" aria-label="Navigate practice cards">

@@ -207,7 +207,7 @@ export function createSpeaker() {
     source.start(0);
   }
 
-  async function speak(rawText, { slow = false, speed, onState } = {}) {
+  async function speak(rawText, { slow = false, speed, requireAi = false, onState } = {}) {
     const cleaned = speakableIndonesian(rawText);
     if (!cleaned) return;
     stop();
@@ -218,7 +218,14 @@ export function createSpeaker() {
     const selectedVoice = provider === "gemini" ? settings.geminiTtsVoice : settings.mistralTtsVoice;
     const selectedModel = provider === "gemini" ? settings.geminiTtsModel : settings.mistralTtsModel;
     const effectiveSlow = slow || settings.speechSpeed === "slow";
-    const useAi = settings.voiceMode !== "browser" && Boolean(activeAiKey(settings)) && navigator.onLine !== false;
+    const hasKey = Boolean(activeAiKey(settings));
+    if (requireAi && (!hasKey || navigator.onLine === false)) {
+      onState?.("error", navigator.onLine === false
+        ? "AI voice needs an internet connection. Please reconnect and try again."
+        : "AI voice is not connected. Please check the shared AI & Voice settings.");
+      return;
+    }
+    const useAi = (requireAi || settings.voiceMode !== "browser") && hasKey && navigator.onLine !== false;
 
     if (!useAi) {
       speakWithBrowser(cleaned, { slow: effectiveSlow, speed, token, onState });
@@ -251,6 +258,10 @@ export function createSpeaker() {
       }
     } catch (error) {
       if (activeToken !== token) return;
+      if (requireAi) {
+        onState?.("error", `${pName} AI voice could not play. Please check the connection and AI & Voice settings.`);
+        return;
+      }
       // Gracefully fall back to the device voice if AI TTS fails.
       if ("speechSynthesis" in window) {
         speakWithBrowser(cleaned, { slow: effectiveSlow, speed, token, onState });
